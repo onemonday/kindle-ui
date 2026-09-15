@@ -8,6 +8,10 @@ local tr = require("l10n").tr
 local InputContainer = require("ui/widget/container/inputcontainer")
 local GestureRange = require("ui/gesturerange")
 local M = InputContainer:extend{ modal=false, covers_header=true, covers_footer=true }
+local action_y = 84
+local action_icon_size = 30
+local action_divider_y = 119
+local content_divider_y = 179
 function M:init()
     self.dimen=Device.screen:getSize()
     self.scale=self.dimen.w/750
@@ -85,18 +89,19 @@ function M:paintTo(bb)
     -- Battery helper calls text/icon through this instance; home top is zero.
     self.power=Device:getPowerDevice()
     Drawer.paintBattery(self,bb,true)
-    Drawer.icon(self,bb,"book-back",34,79,27)
-    self:text(bb,tr("Home"),57,65,22,false,false,210)
-    self:text(bb,"Aa",425,65,25,true,false,70)
-    Drawer.icon(self,bb,"book-toc",500,79,35)
-    Drawer.icon(self,bb,"book-bookmark",575,79,35)
-    Drawer.icon(self,bb,"book-pages",650,79,35)
-    Drawer.icon(self,bb,"book-close",721,79,25)
-    self:rect(bb,0,114,750,1,BB.COLOR_LIGHT_GRAY)
+    Drawer.icon(self,bb,"book-back",34,action_y,action_icon_size)
+    self:text(bb,tr("Home"),57,70,22,false,false,210)
+    self:text(bb,"Aa",425,71,22,true,false,70)
+    Drawer.icon(self,bb,"book-toc",500,action_y,action_icon_size)
+    Drawer.icon(self,bb,"book-bookmark",575,action_y,action_icon_size)
+    Drawer.icon(self,bb,"book-pages",650,action_y,action_icon_size)
+    Drawer.icon(self,bb,"book-close",721,action_y,action_icon_size)
+    self:rect(bb,0,action_divider_y,750,2,BB.COLOR_LIGHT_GRAY)
     local props=self.ui.doc_props or {}
     local title=props.display_title or props.title or tr("Book")
-    self:text(bb,title,26,139,21,false,true,696)
-    self:rect(bb,0,179,750,3,BB.COLOR_BLACK)
+    local title_center_y=(action_divider_y+2+content_divider_y)/2
+    self:text(bb,title,26,title_center_y,21,false,true,696,true)
+    self:rect(bb,0,content_divider_y,750,3,BB.COLOR_BLACK)
     local page,total,ratio=self:bookProgress()
     self:rect(bb,0,h-142,750,3,BB.COLOR_BLACK)
     self:text(bb,total>0 and (tr("Page").." "..page.." / "..total) or "—",30,h-120,19,false,false,500)
@@ -109,7 +114,7 @@ function M:bookTap(pos)
     local x,y=pos.x/self.scale,pos.y/self.scale
     if y<45 then
         if x>=330 and x<=420 then self.owner:onKindleDrawer() end
-    elseif y<114 then
+    elseif y<action_divider_y then
         if x<270 then return self:bookAction("Home")
         elseif x>=387 and x<463 then self:showLayoutPanel()
         elseif x>=463 and x<538 then return self:bookAction("ShowToc")

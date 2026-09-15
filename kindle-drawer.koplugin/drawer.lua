@@ -59,14 +59,15 @@ function Drawer:refresh()
     UIManager:setDirty(self, "ui", Geom:new{ x = 0, y = 0, w = self.dimen.w, h = self.height })
 end
 
-function Drawer:text(bb, value, x, y, size, centered, bold, max_width)
+function Drawer:text(bb, value, x, y, size, centered, bold, max_width, vertically_centered)
     -- Layout uses physical pixels; getFace applies DPI scaling internally.
     local widget = TextWidget:new{ text = value, face = Font:getFace("cfont", size * self.scale / (Screen:scaleBySize(1000) / 1000)),
         bold = bold, padding = 0, lang = L10n.language(), para_direction_rtl = false,
         max_width = math.floor((max_width or (centered and 235 or 600)) * self.scale) }
     local width = widget:getSize().w
+    local height = widget:getSize().h
     widget:paintTo(bb, math.floor(self.offset + x * self.scale - (centered and width / 2 or 0)),
-        math.floor(y * self.scale))
+        math.floor(y * self.scale - (vertically_centered and height / 2 or 0)))
     widget:free()
 end
 

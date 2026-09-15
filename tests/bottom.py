@@ -363,7 +363,26 @@ for _,size in ipairs({{1072,1448},{1448,1072},{600,800}}) do
  end
 end
 screen.w,screen.h=1072,1448
-G_reader_settings.data={};local p=Plugin:new{ui=makeReader(cre)};p:onQuickActionsPanel();local d=p.quick_actions_panel
+G_reader_settings.data={};local ui=makeReader(cre);ui.doc_props={display_title="Test book"}
+function ui:getCurrentPage() return 369 end
+function ui.document:getPageCount() return 810 end
+local p=Plugin:new{ui=ui};p:onQuickActionsPanel();local d=p.quick_actions_panel
+painted={};d:paintTo(bb)
+local action_icons=0;local aa,title;local action_divider,content_divider
+for _,item in ipairs(painted) do
+ if item.kind=="image" and item.file:find("/book-",1,true) and not item.file:find("book-chevron",1,true) then
+  action_icons=action_icons+1
+  assert(item.w==math.floor(30*d.scale) and item.h==math.floor(30*d.scale),"quick-action icons share one smaller size")
+ elseif item.kind=="text" and item.text=="Aa" then aa=item
+ elseif item.kind=="text" and item.text=="Test book" then title=item
+ elseif item.kind=="rect" and item.y==math.floor(119*d.scale) then action_divider=item
+ elseif item.kind=="rect" and item.y==math.floor(179*d.scale) then content_divider=item end
+end
+assert(action_icons==5 and aa and math.abs(aa.size-22*d.scale)<=1,"Aa matches the action row")
+assert(title and title.x==math.floor(26*d.scale),"book title keeps its left alignment")
+assert(title.y==math.floor(150*d.scale-title.size/2),"book title is vertically centered in its band")
+assert(action_divider and action_divider.h==math.floor(2*d.scale))
+assert(content_divider and content_divider.h==math.floor(3*d.scale) and action_divider.h<content_divider.h)
 local function tap(x,y) d:onQuick_tap(nil,{pos={x=x*d.scale,y=y*d.scale}}) end
 tap(425,79);assert(p.bottom_drawer and not p.quick_actions_panel)
 p.bottom_drawer:selectTab(3);p.bottom_drawer:onClose();assert(p.quick_actions_panel)
