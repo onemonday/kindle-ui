@@ -44,7 +44,7 @@ function Drawer:init()
         sy = sy + 150
     end
     if Device:hasNaturalLight() then
-        self.sliders[#self.sliders + 1] = { id = "warmth", title = tr("Warmth"), y = sy, min = 0, max = 100 }
+        self.sliders[#self.sliders + 1] = { id = "warmth", title = tr("Warmth"), y = sy, min = 0, max = 24 }
     end
     self.ges_events = {}
     for _, name in ipairs({ "tap", "pan", "pan_release", "swipe", "multiswipe" }) do
@@ -83,7 +83,8 @@ end
 
 function Drawer:value(slider)
     if slider.id == "brightness" then return self.power:frontlightIntensity() end
-    return self.power:frontlightWarmth()
+    -- Present Kindle steps while preserving KOReader's public 0–100 API.
+    return math.max(0, math.min(24, math.floor(self.power:frontlightWarmth() * 24 / 100 + 0.5)))
 end
 
 -- Draw battery as UI primitives, so it follows the screen's night-mode inversion.
@@ -155,15 +156,16 @@ function Drawer:paintTo(bb)
     for _, slider in ipairs(self.sliders) do
         local value = self:value(slider)
         local fraction = math.max(0, math.min(1, (value - slider.min) / (slider.max - slider.min)))
+        local knob_x = 90 + fraction * 570
         self:text(bb, slider.title, 40, slider.y + 12, 22)
-        self:text(bb, tostring(math.floor(value + 0.5)), 375, slider.y + 55, 17, true)
+        self:text(bb, tostring(math.floor(value + 0.5)), knob_x, slider.y + 55, 17, true)
         self:text(bb, "−", 50, slider.y + 82, 30, true)
         self:text(bb, "+", 700, slider.y + 82, 30, true)
         bb:paintRect(math.floor(self.offset + 90 * self.scale), math.floor((slider.y + 103) * self.scale),
             math.floor(570 * self.scale), math.max(1, math.floor(2 * self.scale)), black)
         bb:paintRect(math.floor(self.offset + 90 * self.scale), math.floor((slider.y + 100) * self.scale),
             math.floor(570 * self.scale * fraction), math.max(1, math.floor(7 * self.scale)), black)
-        self:icon(bb, "knob", 90 + fraction * 570, slider.y + 104, 42)
+        self:icon(bb, "knob", knob_x, slider.y + 104, 42)
     end
     self:icon(bb, "close", 375, self.height / self.scale - 32, 128)
     bb:paintRect(0, self.height - 3, self.dimen.w, 3, black)
@@ -176,7 +178,7 @@ function Drawer:adjust(slider, x)
     else value = slider.min + (x - 90) / 570 * (slider.max - slider.min) end
     value = math.max(slider.min, math.min(slider.max, math.floor(value + 0.5)))
     if slider.id == "brightness" then self.power:setIntensity(value)
-    else self.power:setWarmth(value) end
+    else self.power:setWarmth(math.floor(value * 100 / 24 + 0.5)) end
     self:refresh()
 end
 

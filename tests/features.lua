@@ -129,3 +129,33 @@ q.drawer:onCharging(); assert(manager.last_dirty.refresh=="ui")
 q.drawer:onNotCharging(); assert(manager.last_dirty.refresh=="ui")
 q:onCloseWidget(); power.charging=false
 print("PASS: charging bolt toggles in both themes; power events request ordinary UI refresh")
+
+G_reader_settings.data={}; local q=Plugin:new{ui=newUI()}; q:onKindleDrawer()
+local d=q.drawer; local warm=d.sliders[2]
+assert(warm.max==24)
+for step=0,24 do
+ d:adjust(warm,90+570*step/24)
+ assert(power.warmth==math.floor(step*100/24+0.5))
+ assert(d:value(warm)==step, "warmth step must survive API round trip")
+end
+power.warmth=50; d:adjust(warm,700); assert(d:value(warm)==13)
+d:adjust(warm,50); assert(d:value(warm)==12)
+-- Check each label shares its horizontal center with the corresponding knob.
+local text,icon=d.text,d.icon
+for _,level in ipairs({0,7,21,24}) do
+ power.intensity=level; power.warmth=math.floor(level*100/24+0.5)
+ local labels,knobs={},{}
+ d.text=function(self,bb,value,x,y,size,centered,bold,max_width)
+  for _,slider in ipairs(self.sliders) do
+   if y==slider.y+55 then labels[#labels+1]={x=x,value=value} end
+  end
+ end
+ d.icon=function(self,bb,id,x,y,size,active)
+  if id=="knob" then knobs[#knobs+1]=x end
+ end
+ d:paintTo(bb)
+ assert(#labels==2 and #knobs==2)
+ for i=1,2 do assert(labels[i].x==knobs[i] and labels[i].value==tostring(level)) end
+end
+d.text=text; d.icon=icon; q:onCloseWidget()
+print("PASS: all 25 warmth levels round-trip, +/- steps, moving labels at endpoints and intermediate values")
