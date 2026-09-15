@@ -1,0 +1,191 @@
+local InputContainer = require("ui/widget/container/inputcontainer")
+local Geom = require("ui/geometry")
+local GestureRange = require("ui/gesturerange")
+local TextWidget = require("ui/widget/textwidget")
+local ImageWidget = require("ui/widget/imagewidget")
+local Font = require("ui/font")
+local Blitbuffer = require("ffi/blitbuffer")
+local Device = require("device")
+local UIManager = require("ui/uimanager")
+local NetworkMgr = require("ui/network/manager")
+local Screen = Device.screen
+local black, white = Blitbuffer.COLOR_BLACK, Blitbuffer.COLOR_WHITE
+local source = debug.getinfo(1, "S").source:sub(2)
+local icon_dir = source:match("(.*/)") .. "icons/"
+local Drawer = InputContainer:extend{ modal = true, covers_header = true }
+
+function Drawer:init()
+    self.dimen = Screen:getSize()
+    self.power = Device:getPowerDevice()
+    local rows = math.ceil(#self.buttons / 3)
+    local slider_count = (Device:hasFrontlight() and 1 or 0) + (Device:hasNaturalLight() and 1 or 0)
+    local design_height = 110 + rows * 130 + slider_count * 140 + 60
+    self.scale = math.min(self.dimen.w / 750, self.dimen.h * 0.88 / design_height)
+    self.offset = (self.dimen.w - 750 * self.scale) / 2
+    self.height = math.floor(design_height * self.scale)
+    self.targets, self.sliders, self.images = {}, {}, {}
+    for i, button in ipairs(self.buttons) do
+        local row = math.floor((i - 1) / 3)
+        local count = math.min(3, #self.buttons - row * 3)
+        local col = (i - 1) % 3
+        self.targets[#self.targets + 1] = {
+            x = (col + 0.5) * 750 / count, y = 140 + row * 130, button = button,
+        }
+    end
+    local sy = 110 + rows * 130
+    if Device:hasFrontlight() then
+        self.sliders[#self.sliders + 1] = { id = "brightness", title = "Яркость", y = sy,
+            min = self.power.fl_min, max = self.power.fl_max }
+        sy = sy + 140
+    end
+    if Device:hasNaturalLight() then
+        self.sliders[#self.sliders + 1] = { id = "warmth", title = "Теплота", y = sy, min = 0, max = 100 }
+    end
+    self.ges_events = {}
+    for _, name in ipairs({ "tap", "pan", "pan_release", "swipe", "multiswipe" }) do
+        self.ges_events["Drawer_" .. name] = {
+            GestureRange:new{ ges = name, range = self.dimen },
+        }
+    end
+    self.key_events.Close = { { "Back" } }
+end
+
+function Drawer:refresh()
+    UIManager:setDirty(self, "ui", Geom:new{ x = 0, y = 0, w = self.dimen.w, h = self.height })
+end
+
+function Drawer:text(bb, value, x, y, size, centered, bold)
+    local widget = TextWidget:new{ text = value, face = Font:getFace("cfont", math.max(10, size * self.scale)),
+        bold = bold, max_width = math.floor((centered and 235 or 600) * self.scale) }
+    local width = widget:getSize().w
+    widget:paintTo(bb, math.floor(self.offset + x * self.scale - (centered and width / 2 or 0)),
+        math.floor(y * self.scale))
+    widget:free()
+end
+
+function Drawer:icon(bb, id, x, y, size)
+    local key = id .. size
+    if not self.images[key] then
+        self.images[key] = ImageWidget:new{ file = icon_dir .. id .. ".svg",
+            width = math.floor(size * self.scale), height = math.floor(size * self.scale) }
+    end
+    self.images[key]:paintTo(bb, math.floor(self.offset + (x - size / 2) * self.scale),
+        math.floor((y - size / 2) * self.scale))
+end
+
+function Drawer:value(slider)
+    if slider.id == "brightness" then return self.power:frontlightIntensity() end
+    return self.power:frontlightWarmth()
+end
+
+function Drawer:paintTo(bb)
+    bb:paintRect(0, 0, self.dimen.w, self.height, white)
+    self:text(bb, "Kindle", 22, 20, 23, false, true)
+    self:text(bb, os.date("%H:%M · %d.%m.%Y"), 22, 51, 20)
+    self:text(bb, tostring(self.power:getCapacity()) .. "%", 685, 20, 22, true)
+    for _, target in ipairs(self.targets) do
+        local id = target.button.id
+        self:icon(bb, id, target.x, target.y, 62)
+        self:text(bb, target.button.text, target.x, target.y + 44, 20, true)
+        local state
+        if id == "wifi" then state = NetworkMgr:isWifiOn()
+        elseif id == "night" then state = G_reader_settings:isTrue("night_mode")
+        elseif id == "light" then state = self.power:isFrontlightOn() end
+        if state ~= nil then self:text(bb, state and "Вкл." or "Выкл.", target.x, target.y + 71, 16, true) end
+    end
+    for _, slider in ipairs(self.sliders) do
+        local value = self:value(slider)
+        local fraction = math.max(0, math.min(1, (value - slider.min) / (slider.max - slider.min)))
+        self:text(bb, slider.title, 40, slider.y + 12, 22)
+        self:text(bb, tostring(math.floor(value + 0.5)), 375, slider.y + 48, 17, true)
+        self:text(bb, "−", 50, slider.y + 72, 30, true)
+        self:text(bb, "+", 700, slider.y + 72, 30, true)
+        bb:paintRect(math.floor(self.offset + 90 * self.scale), math.floor((slider.y + 91) * self.scale),
+            math.floor(570 * self.scale), math.max(1, math.floor(2 * self.scale)), black)
+        bb:paintRect(math.floor(self.offset + 90 * self.scale), math.floor((slider.y + 88) * self.scale),
+            math.floor(570 * self.scale * fraction), math.max(1, math.floor(7 * self.scale)), black)
+        self:icon(bb, "knob", 90 + fraction * 570, slider.y + 92, 42)
+    end
+    self:icon(bb, "close", 375, self.height / self.scale - 28, 64)
+    bb:paintRect(0, self.height - 3, self.dimen.w, 3, black)
+end
+
+function Drawer:adjust(slider, x)
+    local value
+    if x < 80 then value = self:value(slider) - 1
+    elseif x > 675 then value = self:value(slider) + 1
+    else value = slider.min + (x - 90) / 570 * (slider.max - slider.min) end
+    value = math.max(slider.min, math.min(slider.max, math.floor(value + 0.5)))
+    if slider.id == "brightness" then self.power:setIntensity(value)
+    else self.power:setWarmth(value) end
+    self:refresh()
+end
+
+function Drawer:onDrawer_tap(_, ges)
+    local x, y = (ges.pos.x - self.offset) / self.scale, ges.pos.y / self.scale
+    if ges.pos.y >= self.height - 55 * self.scale then return self:onClose() end
+    for _, target in ipairs(self.targets) do
+        if math.abs(x - target.x) < 105 and y >= target.y - 40 and y <= target.y + 95 then
+            self.owner:activate(target.button.id)
+            return true
+        end
+    end
+    for _, slider in ipairs(self.sliders) do
+        if y >= slider.y + 65 and y <= slider.y + 125 then self:adjust(slider, x); return true end
+    end
+    return true
+end
+
+function Drawer:sliderAt(pos)
+    if not pos then return nil end
+    local x, y = (pos.x - self.offset) / self.scale, pos.y / self.scale
+    for _, slider in ipairs(self.sliders) do
+        if y >= slider.y + 65 and y <= slider.y + 125 and x >= 80 and x <= 675 then
+            return slider
+        end
+    end
+end
+
+function Drawer:onDrawer_pan(_, ges)
+    if self.drag_slider == nil then
+        self.drag_slider = self:sliderAt(ges.start_pos) or false
+    end
+    if self.drag_slider then
+        local x = (ges.pos.x - self.offset) / self.scale
+        self:adjust(self.drag_slider, math.max(90, math.min(660, x)))
+    end
+    return true
+end
+function Drawer:onDrawer_pan_release(_, ges)
+    if self.drag_slider then
+        local x = (ges.pos.x - self.offset) / self.scale
+        self:adjust(self.drag_slider, math.max(90, math.min(660, x)))
+    end
+    self.drag_slider = nil
+    return true
+end
+function Drawer:onDrawer_swipe(_, ges)
+    -- Fast drags may end as swipes rather than pan_release.
+    local slider = self.drag_slider or self:sliderAt(ges.pos)
+    if slider and (ges.direction == "east" or ges.direction == "west") then
+        local pos = ges.end_pos
+        if pos then
+            self:adjust(slider, math.max(90, math.min(660, (pos.x - self.offset) / self.scale)))
+        end
+    elseif ges.direction == "north" and not slider then
+        self:onClose()
+    end
+    self.drag_slider = nil
+    return true
+end
+function Drawer:onDrawer_multiswipe()
+    self.drag_slider = nil
+    return true
+end
+function Drawer:onClose() UIManager:close(self); return true end
+function Drawer:onCloseWidget()
+    if self.owner.drawer == self then self.owner.drawer = nil end
+    for _, widget in pairs(self.images) do widget:free() end
+    UIManager:setDirty(nil, "partial")
+end
+return Drawer
