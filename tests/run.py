@@ -20,21 +20,25 @@ function power:frontlightIntensity() return self.intensity end
 function power:frontlightWarmth() return self.warmth end
 function power:setIntensity(v) assert(v>=0 and v<=24); self.intensity=v end
 function power:setWarmth(v) assert(v>=0 and v<=100); self.warmth=v end
+function power:isCharging() return self.charging == true end
 function power:getCapacity() return 69 end
 function power:isFrontlightOn() return self.intensity>0 end
 function power:toggleFrontlight() self.intensity=self.intensity>0 and 0 or 12 end
 screen={ w=1072,h=1448 }
+function screen:scaleBySize(size) return math.floor(size * (self.dpi_scale or 2) + 0.5) end
 function screen:getSize() return {x=0,y=0,w=self.w,h=self.h} end
 device={screen=screen,frontlight=true,warm=true,wifi=true}
+function device:canRestart() return true end
+function device:canSuspend() return true end
 function device:getPowerDevice() return power end
 function device:hasFrontlight() return self.frontlight end
 function device:hasNaturalLight() return self.warm end
 function device:hasWifiToggle() return self.wifi end
 package.preload.device=function() return device end
 manager={}
-function manager:show(w) self.shown=w end
-function manager:close(w) w:onCloseWidget(); if self.shown==w then self.shown=nil end end
-function manager:setDirty() end
+function manager:show(w,refresh,region) self.shown=w; self.last_show={refresh=refresh,region=region} end
+function manager:close(w) if w.onCloseWidget then w:onCloseWidget() end; if self.shown==w then self.shown=nil end end
+function manager:setDirty(w,refresh,region) self.last_dirty={widget=w,refresh=refresh,region=region} end
 package.preload["ui/uimanager"]=function() return manager end
 package.preload["ui/event"]=function() return {new=function(_,name) return {name=name} end} end
 package.preload.dispatcher=function() return {registerAction=function() end} end
@@ -44,8 +48,18 @@ function network:toggleWifiOn() self.on=true end
 function network:toggleWifiOff() self.on=false end
 package.preload["ui/network/manager"]=function() return network end
 package.preload["ui/widget/infomessage"]=function() return Base end
-package.preload["ui/font"]=function() return {getFace=function(_,_,size) return size end} end
-package.preload["ffi/blitbuffer"]=function() return {COLOR_BLACK="black",COLOR_WHITE="white"} end
+package.preload["ui/font"]=function() return {getFace=function(_,_,size) return screen:scaleBySize(size) end} end
+package.preload["ffi/blitbuffer"]=function()
+ return {COLOR_BLACK="black",COLOR_WHITE="white",COLOR_LIGHT_GRAY="#ccc",TYPE_BB8A=1,
+ Color8A=function(v,a) return {value=v,alpha=a} end,
+ new=function(w,h,t)
+  local b={w=w,h=h,t=t,pixels={},background={value=0,alpha=0}}
+  function b:fill(v) self.background=v end
+  function b:paintRect(x,y,rw,rh,c) assert(x+rw<=self.w and y+rh<=self.h); self.pixels[#self.pixels+1]={x=x,y=y,w=rw,h=rh,c=c}; self.ink=c end
+  function b:free() self.freed=true end
+  return b
+ end}
+end
 painted={}
 local Text=Base:extend{}
 function Text:getSize() return {w=#self.text*self.face*0.28,h=self.face} end
@@ -53,10 +67,14 @@ function Text:paintTo(bb,x,y) painted[#painted+1]={kind="text",text=self.text,x=
 function Text:free() end
 package.preload["ui/widget/textwidget"]=function() return Text end
 local Image=Base:extend{}
-function Image:paintTo(bb,x,y) painted[#painted+1]={kind="image",file=self.file,x=x,y=y,w=self.width,h=self.height} end
+function Image:paintTo(bb,x,y) assert(self.alpha == true, "SVG must alpha blend"); assert(self.original_in_nightmode == false, "UI icons must follow whole-screen inversion"); painted[#painted+1]={kind="image",file=self.file,x=x,y=y,w=self.width,h=self.height} end
 function Image:free() end
 package.preload["ui/widget/imagewidget"]=function() return Image end
 bb={paintRect=function(_,x,y,w,h,color) painted[#painted+1]={kind="rect",x=x,y=y,w=w,h=h,color=color} end}
+function bb:alphablitFrom(source,x,y,ox,oy,w,h)
+ assert(ox==0 and oy==0 and h<=source.h and w==source.w)
+ painted[#painted+1]={kind="shade",x=x,y=y,w=w,h=h,color=source.ink}
+end
 function newUI()
  local menu={activation_menu="swipe_tap",original_calls=0}
  function menu:registerToMainMenu() end
@@ -76,6 +94,8 @@ plugin:activate("settings"); assert(not plugin.drawer and ui.menu.original_calls
 plugin:onKindleDrawer(); local d=plugin.drawer
 assert(d.height<screen.h and #d.sliders==2)
 d:paintTo(bb)
+for _,v in ipairs(painted) do if v.kind=="text" then
+ assert(math.abs(v.size - 23*d.scale) <= 1, "Font DPI must only apply once"); break end end
 d:adjust(d.sliders[1],-100); assert(power.intensity==11)
 d:adjust(d.sliders[1],660); assert(power.intensity==24)
 d:adjust(d.sliders[1],700); assert(power.intensity==24)
@@ -97,7 +117,7 @@ d:onDrawer_pan(nil,{start_pos={x=track.x,y=d.height-10},pos=track})
 assert(power.intensity==previous)
 d:onDrawer_multiswipe()
 d:onDrawer_tap(nil,{pos={x=0,y=screen.h-1}}); assert(not plugin.drawer)
-for _,id in ipairs({"wifi","night","sync","light"}) do plugin.settings.hidden[id]=true end
+for _,id in ipairs({"wifi","night","sync","light","power","ssh"}) do plugin.settings.hidden[id]=true end
 assert(#plugin:buttons()==1 and plugin:buttons()[1].id=="settings")
 plugin.settings.enabled=false; ui.menu:onTapShowMenu({}); assert(ui.menu.original_calls==2)
 plugin.settings.enabled=true; ui.menu:onSwipeShowMenu({direction="south"}); assert(plugin.drawer)
@@ -105,21 +125,26 @@ plugin:onSuspend(); assert(not plugin.drawer)
 plugin:onCloseWidget(); assert(ui.menu.onTapShowMenu==original)
 G_reader_settings.data={}; device.frontlight=false; device.warm=false; device.wifi=false
 ui2=newUI(); ui2.document=nil; ui2.kosync=nil
-p2=Plugin:new{ui=ui2}; p2:onKindleDrawer(); assert(#p2.drawer.sliders==0 and #p2:buttons()==2)
+p2=Plugin:new{ui=ui2}; p2:onKindleDrawer(); assert(#p2.drawer.sliders==0 and #p2:buttons()==3)
 p2:onCloseWidget()
 -- Geometry also fits landscape.
 device.frontlight=true; device.warm=true; screen.w=1448; screen.h=1072
 p3=Plugin:new{ui=newUI()}; p3:onKindleDrawer(); assert(p3.drawer.height<screen.h)
 p3:onCloseWidget()
 ''')
+preview_paint = lua.globals().painted
+lua.execute(Path('tests/features.lua').read_text())
 print('PASS: Lua load, menu hooks/restore, all-settings escape, toggle visibility, capability filtering, slider bounds, dismissal, suspend, portrait/landscape fit')
 # Approximate visual artifact from actual paint calls; font metrics are doubles.
 from html import escape
 parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="1072" height="1448" viewBox="0 0 1072 1448"><rect width="1072" height="1448" fill="#eee"/>']
-for item in lua.globals().painted.values():
+parts.append('<defs><pattern id="shade" width="6" height="6" patternUnits="userSpaceOnUse"><rect width="3" height="3" fill="black"/><rect x="3" y="3" width="3" height="3" fill="black"/></pattern></defs>')
+for item in preview_paint.values():
     k=item['kind']; x=item['x']; y=item['y']
     if k=='rect': parts.append(f'<rect x="{x}" y="{y}" width="{item["w"]}" height="{item["h"]}" fill="{item["color"]}"/>')
     elif k=='text': parts.append(f'<text x="{x}" y="{y+item["size"]}" font-family="sans-serif" font-size="{item["size"]}" font-weight="{700 if item["bold"] else 400}">{escape(item["text"])}</text>')
+    elif k=='shade':
+        parts.append(f'<rect x="{x}" y="{y}" width="{item["w"]}" height="{item["h"]}" fill="url(#shade)"/>')
     else:
         import base64
         data=base64.b64encode(Path(item['file']).read_bytes()).decode()
