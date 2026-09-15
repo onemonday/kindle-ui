@@ -88,7 +88,7 @@ function Drawer:value(slider)
 end
 
 -- Draw battery as UI primitives, so it follows the screen's night-mode inversion.
-function Drawer:paintBattery(bb)
+function Drawer:paintBattery(bb, align_to_text)
     local capacity = tonumber(self.power:getCapacity())
     if capacity and capacity == capacity then
         capacity = math.max(0, math.min(100, math.floor(capacity + 0.5)))
@@ -96,7 +96,14 @@ function Drawer:paintBattery(bb)
         capacity = nil
     end
     self:text(bb, capacity and (capacity .. "%") or "—", 660, 20, 22, true, false, 80)
+    local icon_y_offset = 0
+    if align_to_text then
+        local measure = TextWidget:new{ text = "100%", face = Font:getFace("cfont", 22 * self.scale / (Screen:scaleBySize(1000) / 1000)), padding = 0 }
+        icon_y_offset = 20 + measure:getSize().h / self.scale / 2 - 33
+        measure:free()
+    end
     local function rect(x, y, w, h, color)
+        y = y + icon_y_offset
         bb:paintRect(math.floor(self.offset + x * self.scale), math.floor(y * self.scale),
             math.max(1, math.floor(w * self.scale)), math.max(1, math.floor(h * self.scale)), color)
     end
@@ -104,7 +111,7 @@ function Drawer:paintBattery(bb)
     rect(699, 27, 25, 12, white)
     rect(726, 30, 3, 6, black)
     if self.power:isCharging() then
-        self:icon(bb, "charging", 711.5, 33, 20)
+        self:icon(bb, "charging", 711.5, 33 + icon_y_offset, 20)
     elseif capacity and capacity > 0 then
         rect(701, 29, 21 * capacity / 100, 8, black)
     end

@@ -75,6 +75,7 @@ function bb:alphablitFrom(source,x,y,ox,oy,w,h)
  assert(ox==0 and oy==0 and h<=source.h and w==source.w)
  painted[#painted+1]={kind="shade",x=x,y=y,w=w,h=h,color=source.ink}
 end
+function device:isTouchDevice() return true end
 function newUI()
  local menu={activation_menu="swipe_tap",original_calls=0}
  function menu:registerToMainMenu() end
@@ -87,7 +88,7 @@ function newUI()
 end
 Plugin=require("main")
 ui=newUI(); original=ui.menu.onTapShowMenu; plugin=Plugin:new{ui=ui}
-assert(ui.menu:onTapShowMenu({})==true and plugin.drawer)
+assert(ui.menu:onSwipeShowMenu({direction="south"})==true and plugin.drawer)
 assert(ui.menu.original_calls==0)
 local first=plugin.drawer; plugin:onKindleDrawer(); assert(first==plugin.drawer)
 plugin:activate("settings"); assert(not plugin.drawer and ui.menu.original_calls==1)
@@ -119,7 +120,7 @@ d:onDrawer_multiswipe()
 d:onDrawer_tap(nil,{pos={x=0,y=screen.h-1}}); assert(not plugin.drawer)
 for _,id in ipairs({"wifi","night","sync","light","power","ssh"}) do plugin.settings.hidden[id]=true end
 assert(#plugin:buttons()==1 and plugin:buttons()[1].id=="settings")
-plugin.settings.enabled=false; ui.menu:onTapShowMenu({}); assert(ui.menu.original_calls==2)
+plugin.settings.enabled=false; plugin.settings.quick_actions_enabled=false; ui.menu:onTapShowMenu({}); assert(ui.menu.original_calls==2)
 plugin.settings.enabled=true; ui.menu:onSwipeShowMenu({direction="south"}); assert(plugin.drawer)
 plugin:onSuspend(); assert(not plugin.drawer)
 plugin:onCloseWidget(); assert(ui.menu.onTapShowMenu==original)

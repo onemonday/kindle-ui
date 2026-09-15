@@ -30,10 +30,10 @@ function Plugin:init()
         local original = menu[name]
         if original then
             local hook = function(target, ges)
-                if self.settings.enabled == false then return original(target, ges) end
-                if name == "onTapShowMenu" and target.activation_menu ~= "swipe" then
-                    return self:onKindleDrawer()
-                elseif name == "onSwipeShowMenu" and target.activation_menu ~= "tap"
+                if name == "onTapShowMenu" and self.ui.document
+                        and Device:isTouchDevice() and self.settings.quick_actions_enabled ~= false then
+                    return self:onQuickActionsPanel()
+                elseif name == "onSwipeShowMenu" and self.settings.enabled ~= false
                         and ges.direction == "south" then
                     self:onKindleDrawer()
                     self.ui:handleEvent(Event:new("HandledAsSwipe"))
@@ -44,6 +44,15 @@ function Plugin:init()
             self.hooks[name] = { original = original, hook = hook }
             menu[name] = hook
         end
+    end
+    local config = self.ui.config
+    if config and config.onShowConfigMenu then
+        self.bottom_original = config.onShowConfigMenu
+        self.bottom_hook = function(target)
+            if self.settings.bottom_enabled == false or not Device:isTouchDevice() then return self.bottom_original(target) end
+            return self:onKindleBottomDrawer()
+        end
+        config.onShowConfigMenu = self.bottom_hook
     end
 end
 
@@ -72,16 +81,35 @@ function Plugin:addToMainMenu(items)
     end
     items.kindle_drawer = {
         text = tr("Kindle Drawer"), sorting_hint = "more_tools", sub_item_table = {
-            { text = tr("Open drawer"), callback = function() self:onKindleDrawer() end },
-            { text = tr("Replace top menu"),
+            { text = tr("Enable top drawer"),
               checked_func = function() return self.settings.enabled ~= false end,
-              callback = function() self.settings.enabled = self.settings.enabled == false; self:save() end },
-            { text = tr("Drawer buttons"), sub_item_table = buttons },
-            { text = tr("Header title"), callback = function() self:editTitle() end },
-            { text = tr("Dim background"),
-              checked_func = function() return self.settings.dim_background ~= false end,
+              callback = function() self:closeDrawer(); self.settings.enabled = self.settings.enabled == false; self:save() end },
+            { text = tr("Top drawer settings"), sub_item_table = {
+                { text = tr("Open drawer"), callback = function() self:onKindleDrawer() end },
+                { text = tr("Drawer buttons"), sub_item_table = buttons },
+                { text = tr("Header title"), callback = function() self:editTitle() end },
+                { text = tr("Dim background"),
+                  checked_func = function() return self.settings.dim_background ~= false end,
+                  callback = function()
+                      self.settings.dim_background = self.settings.dim_background == false
+                      self:save()
+                  end },
+            } },
+            { text = tr("Enable bottom drawer"),
+              checked_func = function() return self.settings.bottom_enabled ~= false end,
+              callback = function() self:closeBottomDrawer(); self.settings.bottom_enabled = self.settings.bottom_enabled == false; self:save() end },
+            { text = tr("Bottom drawer settings"), sub_item_table = {
+                { text = tr("Open drawer"), enabled_func = function() return self.ui.config ~= nil end,
+                  callback = function() self:onKindleBottomDrawer() end },
+                { text = tr("Remember last tab"),
+                  checked_func = function() return self.settings.bottom_remember_tab ~= false end,
+                  callback = function() self.settings.bottom_remember_tab = self.settings.bottom_remember_tab == false; self:save() end },
+            } },
+            { text = tr("Quick actions panel"),
+              checked_func = function() return self.settings.quick_actions_enabled ~= false end,
               callback = function()
-                  self.settings.dim_background = self.settings.dim_background == false
+                  self:closeQuickActionsPanel()
+                  self.settings.quick_actions_enabled = self.settings.quick_actions_enabled == false
                   self:save()
               end },
             { text = tr("Full refresh on open and close"),
@@ -155,11 +183,66 @@ function Plugin:buttons()
 end
 
 function Plugin:onKindleDrawer()
+    self:closeQuickActionsPanel()
+    self:closeBottomDrawer()
     if not self.drawer then
         self.drawer = Drawer:new{ owner = self, buttons = self:buttons() }
         UIManager:show(self.drawer, self.drawer.full_refresh and "full" or "ui", Device.screen:getSize())
     end
     return true
+end
+
+function Plugin:onKindleBottomDrawer(return_callback)
+    local config = self.ui.config
+    if not config or not self.ui.document then return false end
+    if not Device:isTouchDevice() then return self:showOriginalBottom() end
+    if self.bottom_drawer then return true end
+    self:closeDrawer()
+    self:closeQuickActionsPanel()
+    if config.config_dialog then config:onCloseConfigMenu() end
+    local BottomDrawer = require("bottomdrawer")
+    self.bottom_drawer = BottomDrawer:new{
+        return_callback = return_callback, owner = self, reader_config = config, ui = self.ui, document = config.document,
+        configurable = config.configurable, config_options = config.options,
+        panel_index = self.settings.bottom_remember_tab ~= false and self.settings.bottom_tab or 1,
+    }
+    config.config_dialog = self.bottom_drawer
+    if self.ui.keyselection then self.ui.keyselection:stopHighlightIndicator(true) end
+    self.ui:handleEvent(Event:new("DisableHinting"))
+    UIManager:show(self.bottom_drawer, self.bottom_drawer.full_refresh and "full" or "ui", Device.screen:getSize())
+    self.ui:handleEvent(Event:new("HandledAsSwipe"))
+    return true
+end
+
+function Plugin:onQuickActionsPanel()
+    if not self.ui.document or not Device:isTouchDevice() or self.settings.quick_actions_enabled == false then return false end
+    self:closeDrawer()
+    self:closeBottomDrawer()
+    if not self.quick_actions_panel then
+        local Panel=require("quickactionspanel")
+        self.quick_actions_panel=Panel:new{owner=self,ui=self.ui,document=self.ui.document}
+        UIManager:show(self.quick_actions_panel,self.quick_actions_panel.full_refresh and "full" or "ui",Device.screen:getSize())
+    end
+    return true
+end
+
+function Plugin:closeQuickActionsPanel()
+    if self.quick_actions_panel then self.quick_actions_panel:closeDialog() end
+end
+
+function Plugin:openQuickActionsLayout()
+    self:closeQuickActionsPanel()
+    if self.settings.bottom_enabled == false then return self:showOriginalBottom() end
+    return self:onKindleBottomDrawer(function() self:onQuickActionsPanel() end)
+end
+
+function Plugin:closeBottomDrawer()
+    if self.bottom_drawer then self.bottom_drawer:closeDialog() end
+end
+
+function Plugin:showOriginalBottom()
+    self:closeBottomDrawer()
+    if self.bottom_original then return self.bottom_original(self.ui.config) end
 end
 
 function Plugin:closeDrawer()
@@ -200,10 +283,15 @@ function Plugin:activate(id)
     end
 end
 
-function Plugin:onSuspend() self:closeDrawer() end
-function Plugin:onSetDimensions() self:closeDrawer() end
+function Plugin:onSuspend() self:closeDrawer(); self:closeBottomDrawer(); self:closeQuickActionsPanel() end
+function Plugin:onSetDimensions() self:onSuspend() end
 function Plugin:onCloseWidget()
+    self:closeQuickActionsPanel()
     self:closeDrawer()
+    self:closeBottomDrawer()
+    if self.ui.config and self.ui.config.onShowConfigMenu == self.bottom_hook then
+        self.ui.config.onShowConfigMenu = self.bottom_original
+    end
     for name, entry in pairs(self.hooks or {}) do
         if self.ui.menu[name] == entry.hook then self.ui.menu[name] = entry.original end
     end
