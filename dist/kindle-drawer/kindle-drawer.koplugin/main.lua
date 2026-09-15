@@ -6,13 +6,16 @@ local Dispatcher = require("dispatcher")
 local NetworkMgr = require("ui/network/manager")
 local InfoMessage = require("ui/widget/infomessage")
 local Drawer = require("drawer")
+local tr = require("l10n").tr
 
 local Plugin = WidgetContainer:extend{ name = "kindle_drawer", is_doc_only = false }
 local choices = {
     { id = "wifi", text = "Wi-Fi" },
-    { id = "night", text = "Тёмный режим" },
-    { id = "sync", text = "Синхронизация" },
-    { id = "light", text = "Подсветка" },
+    { id = "night", text = "Dark Mode" },
+    { id = "sync", text = "Sync" },
+    { id = "light", text = "Frontlight" },
+    { id = "power", text = "Power" },
+    { id = "ssh", text = "SSH server", default_hidden = true },
 }
 
 function Plugin:init()
@@ -46,7 +49,7 @@ end
 
 function Plugin:onDispatcherRegisterActions()
     Dispatcher:registerAction("kindle_drawer", {
-        category = "none", event = "KindleDrawer", title = "Шторка Kindle", general = true,
+        category = "none", event = "KindleDrawer", title = tr("Kindle Drawer"), general = true,
     })
 end
 
@@ -59,28 +62,70 @@ function Plugin:addToMainMenu(items)
     for _, choice in ipairs(choices) do
         local id = choice.id
         buttons[#buttons + 1] = {
-            text = choice.text,
-            checked_func = function() return not self.settings.hidden[id] end,
+            text = tr(choice.text),
+            checked_func = function() return self:isVisible(choice) end,
             callback = function()
-                self.settings.hidden[id] = not self.settings.hidden[id]
+                self.settings.hidden[id] = self:isVisible(choice)
                 self:save()
             end,
         }
     end
     items.kindle_drawer = {
-        text = "Шторка Kindle", sorting_hint = "more_tools", sub_item_table = {
-            { text = "Открыть шторку", callback = function() self:onKindleDrawer() end },
-            { text = "Открывать вместо верхнего меню",
+        text = tr("Kindle Drawer"), sorting_hint = "more_tools", sub_item_table = {
+            { text = tr("Open drawer"), callback = function() self:onKindleDrawer() end },
+            { text = tr("Replace top menu"),
               checked_func = function() return self.settings.enabled ~= false end,
               callback = function() self.settings.enabled = self.settings.enabled == false; self:save() end },
-            { text = "Кнопки шторки", sub_item_table = buttons },
+            { text = tr("Drawer buttons"), sub_item_table = buttons },
+            { text = tr("Header title"), callback = function() self:editTitle() end },
         },
     }
+end
+
+function Plugin:isVisible(choice)
+    local hidden = self.settings.hidden[choice.id]
+    if hidden == nil then hidden = choice.default_hidden end
+    return not hidden
+end
+
+function Plugin:editTitle()
+    local InputDialog = require("ui/widget/inputdialog")
+    local dialog
+    dialog = InputDialog:new{
+        title = tr("Header title"), input = self.settings.title or "Kindle",
+        buttons = {{
+            { text = tr("Cancel"), callback = function() UIManager:close(dialog) end },
+            { text = tr("Save"), is_enter_default = true, callback = function()
+                self.settings.title = dialog:getInputText():gsub("[\r\n]", " ")
+                self:save()
+                UIManager:close(dialog)
+            end },
+        }},
+    }
+    UIManager:show(dialog)
+    dialog:onShowKeyboard()
+end
+
+function Plugin:showPower()
+    self:closeDrawer()
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local dialog
+    local function action(event)
+        UIManager:close(dialog)
+        self.ui:handleEvent(Event:new(event))
+    end
+    dialog = ButtonDialog:new{ title = tr("Power"), buttons = {
+        {{ text = tr("Restart"), enabled = Device:canRestart(), callback = function() action("Restart") end }},
+        {{ text = tr("Sleep"), enabled = Device:canSuspend(), callback = function() action("RequestSuspend") end }},
+        {{ text = tr("Exit KOReader"), callback = function() action("Exit") end }},
+    }}
+    UIManager:show(dialog)
 end
 
 function Plugin:available(id)
     if id == "wifi" then return Device:hasWifiToggle() end
     if id == "light" then return Device:hasFrontlight() end
+    if id == "ssh" then return self.ui.SSH ~= nil end
     if id == "sync" then return self.ui.document ~= nil and self.ui.kosync ~= nil end
     return true
 end
@@ -88,12 +133,12 @@ end
 function Plugin:buttons()
     local result = {}
     for _, choice in ipairs(choices) do
-        if not self.settings.hidden[choice.id] and self:available(choice.id) then
-            result[#result + 1] = choice
+        if self:isVisible(choice) and self:available(choice.id) then
+            result[#result + 1] = { id = choice.id, text = tr(choice.text) }
         end
     end
     -- Always reachable, even when all optional buttons are hidden.
-    result[#result + 1] = { id = "settings", text = "Все настройки" }
+    result[#result + 1] = { id = "settings", text = tr("All Settings") }
     return result
 end
 
@@ -123,12 +168,24 @@ function Plugin:activate(id)
     elseif id == "light" then
         Device:getPowerDevice():toggleFrontlight()
         if self.drawer then self.drawer:refresh() end
+    elseif id == "power" then
+        self:showPower()
+    elseif id == "ssh" then
+        self:closeDrawer()
+        local ssh = self.ui.SSH
+        if not ssh then
+            UIManager:show(InfoMessage:new{ text = tr("Enable the SSH plugin in KOReader first.") })
+        elseif ssh:isRunning() then
+            UIManager:show(InfoMessage:new{ text = tr("SSH server is already running.") })
+        else
+            ssh:start()
+        end
     elseif id == "sync" then
         self:closeDrawer()
         if self.ui.kosync and self.ui.document then
             self.ui:handleEvent(Event:new("KOSyncPushProgress"))
         else
-            UIManager:show(InfoMessage:new{ text = "Откройте книгу и включите плагин KOSync." })
+            UIManager:show(InfoMessage:new{ text = tr("Open a book and enable KOSync.") })
         end
     end
 end

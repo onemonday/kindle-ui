@@ -8,6 +8,8 @@ local Blitbuffer = require("ffi/blitbuffer")
 local Device = require("device")
 local UIManager = require("ui/uimanager")
 local NetworkMgr = require("ui/network/manager")
+local L10n = require("l10n")
+local tr = L10n.tr
 local Screen = Device.screen
 local black, white = Blitbuffer.COLOR_BLACK, Blitbuffer.COLOR_WHITE
 local source = debug.getinfo(1, "S").source:sub(2)
@@ -19,7 +21,7 @@ function Drawer:init()
     self.power = Device:getPowerDevice()
     local rows = math.ceil(#self.buttons / 3)
     local slider_count = (Device:hasFrontlight() and 1 or 0) + (Device:hasNaturalLight() and 1 or 0)
-    local design_height = 110 + rows * 130 + slider_count * 140 + 60
+    local design_height = 124 + rows * 134 + slider_count * 150 + 60
     self.scale = math.min(self.dimen.w / 750, self.dimen.h * 0.88 / design_height)
     self.offset = (self.dimen.w - 750 * self.scale) / 2
     self.height = math.floor(design_height * self.scale)
@@ -29,17 +31,17 @@ function Drawer:init()
         local count = math.min(3, #self.buttons - row * 3)
         local col = (i - 1) % 3
         self.targets[#self.targets + 1] = {
-            x = (col + 0.5) * 750 / count, y = 140 + row * 130, button = button,
+            x = (col + 0.5) * 750 / count, y = 144 + row * 134, button = button,
         }
     end
-    local sy = 110 + rows * 130
+    local sy = 124 + rows * 134
     if Device:hasFrontlight() then
-        self.sliders[#self.sliders + 1] = { id = "brightness", title = "Яркость", y = sy,
+        self.sliders[#self.sliders + 1] = { id = "brightness", title = tr("Brightness"), y = sy,
             min = self.power.fl_min, max = self.power.fl_max }
-        sy = sy + 140
+        sy = sy + 150
     end
     if Device:hasNaturalLight() then
-        self.sliders[#self.sliders + 1] = { id = "warmth", title = "Теплота", y = sy, min = 0, max = 100 }
+        self.sliders[#self.sliders + 1] = { id = "warmth", title = tr("Warmth"), y = sy, min = 0, max = 100 }
     end
     self.ges_events = {}
     for _, name in ipairs({ "tap", "pan", "pan_release", "swipe", "multiswipe" }) do
@@ -54,9 +56,11 @@ function Drawer:refresh()
     UIManager:setDirty(self, "ui", Geom:new{ x = 0, y = 0, w = self.dimen.w, h = self.height })
 end
 
-function Drawer:text(bb, value, x, y, size, centered, bold)
-    local widget = TextWidget:new{ text = value, face = Font:getFace("cfont", math.max(10, size * self.scale)),
-        bold = bold, max_width = math.floor((centered and 235 or 600) * self.scale) }
+function Drawer:text(bb, value, x, y, size, centered, bold, max_width)
+    -- Layout uses physical pixels; getFace applies DPI scaling internally.
+    local widget = TextWidget:new{ text = value, face = Font:getFace("cfont", size * self.scale / (Screen:scaleBySize(1000) / 1000)),
+        bold = bold, padding = 0, lang = L10n.language(), para_direction_rtl = false,
+        max_width = math.floor((max_width or (centered and 235 or 600)) * self.scale) }
     local width = widget:getSize().w
     widget:paintTo(bb, math.floor(self.offset + x * self.scale - (centered and width / 2 or 0)),
         math.floor(y * self.scale))
@@ -66,7 +70,7 @@ end
 function Drawer:icon(bb, id, x, y, size)
     local key = id .. size
     if not self.images[key] then
-        self.images[key] = ImageWidget:new{ file = icon_dir .. id .. ".svg",
+        self.images[key] = ImageWidget:new{ file = icon_dir .. id .. ".svg", alpha = true,
             width = math.floor(size * self.scale), height = math.floor(size * self.scale) }
     end
     self.images[key]:paintTo(bb, math.floor(self.offset + (x - size / 2) * self.scale),
@@ -80,33 +84,38 @@ end
 
 function Drawer:paintTo(bb)
     bb:paintRect(0, 0, self.dimen.w, self.height, white)
-    self:text(bb, "Kindle", 22, 20, 23, false, true)
-    self:text(bb, os.date("%H:%M · %d.%m.%Y"), 22, 51, 20)
+    self:text(bb, self.owner.settings.title or "Kindle", 22, 22, 23, false, true, 550)
+    self:text(bb, os.date("%H:%M · %d.%m.%Y"), 22, 52, 21)
     self:text(bb, tostring(self.power:getCapacity()) .. "%", 685, 20, 22, true)
     for _, target in ipairs(self.targets) do
         local id = target.button.id
         self:icon(bb, id, target.x, target.y, 62)
-        self:text(bb, target.button.text, target.x, target.y + 44, 20, true)
+        self:text(bb, target.button.text, target.x, target.y + 44, 21, true)
         local state
         if id == "wifi" then state = NetworkMgr:isWifiOn()
         elseif id == "night" then state = G_reader_settings:isTrue("night_mode")
-        elseif id == "light" then state = self.power:isFrontlightOn() end
-        if state ~= nil then self:text(bb, state and "Вкл." or "Выкл.", target.x, target.y + 71, 16, true) end
+        elseif id == "light" then state = self.power:isFrontlightOn()
+        elseif id == "ssh" then state = self.owner.ui.SSH:isRunning() end
+        if state ~= nil then self:text(bb, tr(state and "On" or "Off"), target.x, target.y + 70, 15, true) end
+    end
+    if #self.sliders > 0 then
+        bb:paintRect(0, math.floor((self.sliders[1].y - 8) * self.scale), self.dimen.w,
+            math.max(1, math.floor(self.scale)), Blitbuffer.COLOR_LIGHT_GRAY)
     end
     for _, slider in ipairs(self.sliders) do
         local value = self:value(slider)
         local fraction = math.max(0, math.min(1, (value - slider.min) / (slider.max - slider.min)))
         self:text(bb, slider.title, 40, slider.y + 12, 22)
-        self:text(bb, tostring(math.floor(value + 0.5)), 375, slider.y + 48, 17, true)
-        self:text(bb, "−", 50, slider.y + 72, 30, true)
-        self:text(bb, "+", 700, slider.y + 72, 30, true)
-        bb:paintRect(math.floor(self.offset + 90 * self.scale), math.floor((slider.y + 91) * self.scale),
+        self:text(bb, tostring(math.floor(value + 0.5)), 375, slider.y + 55, 17, true)
+        self:text(bb, "−", 50, slider.y + 82, 30, true)
+        self:text(bb, "+", 700, slider.y + 82, 30, true)
+        bb:paintRect(math.floor(self.offset + 90 * self.scale), math.floor((slider.y + 103) * self.scale),
             math.floor(570 * self.scale), math.max(1, math.floor(2 * self.scale)), black)
-        bb:paintRect(math.floor(self.offset + 90 * self.scale), math.floor((slider.y + 88) * self.scale),
+        bb:paintRect(math.floor(self.offset + 90 * self.scale), math.floor((slider.y + 100) * self.scale),
             math.floor(570 * self.scale * fraction), math.max(1, math.floor(7 * self.scale)), black)
-        self:icon(bb, "knob", 90 + fraction * 570, slider.y + 92, 42)
+        self:icon(bb, "knob", 90 + fraction * 570, slider.y + 104, 42)
     end
-    self:icon(bb, "close", 375, self.height / self.scale - 28, 64)
+    self:icon(bb, "close", 375, self.height / self.scale - 32, 128)
     bb:paintRect(0, self.height - 3, self.dimen.w, 3, black)
 end
 
