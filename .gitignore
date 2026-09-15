@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 .venv/
+/AGENTS.md
+/agents.md
+/docs/

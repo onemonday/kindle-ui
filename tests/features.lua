@@ -34,7 +34,7 @@ p4:activate("ssh"); assert(running)
 p4:activate("ssh"); assert(not running and toggles==2)
 p4.ui.SSH=nil; assert(not p4:available("ssh"))
 local items={}; p4:addToMainMenu(items)
-local ssh_item=items.kindle_drawer.sub_item_table[3].sub_item_table[6]
+local ssh_item=items.kindle_drawer.sub_item_table[2].sub_item_table[2].sub_item_table[6]
 ssh_item.callback(); assert(p4.settings.hidden.ssh==true)
 ssh_item.callback(); assert(p4.settings.hidden.ssh==false)
 p4:onCloseWidget()
@@ -105,8 +105,8 @@ for _,dim in ipairs({false,true}) do
 end
 G_reader_settings.data={}; local q=Plugin:new{ui=newUI()}; local items={}; q:addToMainMenu(items)
 local options=items.kindle_drawer.sub_item_table
-assert(options[5].checked_func() and not options[6].checked_func())
-options[5].callback(); options[6].callback()
+assert(options[2].sub_item_table[4].checked_func() and not options[6].checked_func())
+options[2].sub_item_table[4].callback(); options[6].callback()
 assert(q.settings.dim_background==false and q.settings.full_refresh==true)
 q:onKindleDrawer(); q:onSuspend(); assert(manager.last_dirty.refresh=="full")
 q:onCloseWidget()
