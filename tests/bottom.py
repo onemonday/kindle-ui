@@ -25,7 +25,7 @@ function TextBox:paintTo() end
 package.preload["ui/widget/textboxwidget"]=function() return TextBox end
 package.preload["document/credocument"]=function() return {engineInit=function() return {getFontFaceAvailableWeights=function() return {400,700} end} end} end
 package.preload["ui/size"]=function() return {padding={button=2},line={},margin={}} end
-package.preload["logger"]=function() return {dbg=function() end} end
+package.preload["logger"]=function() return {dbg=function() end,info=function() end,warn=function() end,err=function() end} end
 package.preload["ffi/serpent"]=function() return {block=function() return "table" end} end
 package.preload["ui/widget/notification"]=function() return {setNotifySource=function() end,resetNotifySource=function() end} end
 package.preload["util"]=function() return {tableDeepCopy=function(v) return v end, arrayReverse=function(t) return t end} end
@@ -85,11 +85,22 @@ for _,options in ipairs({cre,kopt}) do
  ui.config:onShowConfigMenu(); local d=p.bottom_drawer
  assert(d and ui.config.config_dialog==d and ui.config.original_calls==0)
  local seen,count={},0
- for _,tab in ipairs(d.tabs) do for _,o in ipairs(tab) do seen[o]=true; count=count+1 end end
+ for _,tab in ipairs(d.tabs) do for _,o in ipairs(tab) do if o.name then seen[o]=true; count=count+1 end end end
+ assert(#d.tabs==5)
  local expected=0
  for _,panel in ipairs(options) do for _,o in ipairs(panel.options) do assert(seen[o]); expected=expected+1 end end
  assert(count==expected,"all options mapped once")
- for tab=1,4 do
+ local function tabOf(name) for i,tab in ipairs(d.tabs) do for _,o in ipairs(tab) do if o.name==name then return tab.key end end end end
+ if options==cre then
+  assert(d.tabs[1].title=="Font" and d.tabs[4].title=="Reading" and d.tabs[4][1].kd_caption=="For all books")
+  assert(tabOf("embedded_fonts")=="font" and tabOf("embedded_css")=="layout" and tabOf("status_line")=="page")
+  assert(tabOf("font_size")=="font" and tabOf("rotation_mode")=="layout" and tabOf("view_mode")=="page" and tabOf("nightmode_images")=="more")
+ else
+  assert(d.tabs[1].title=="Image" and d.tabs[4].title=="Reading")
+  assert(tabOf("contrast")=="image" and tabOf("text_wrap")=="image" and tabOf("font_size")=="image" and tabOf("quality")=="image")
+  assert(tabOf("trim_page")=="layout" and tabOf("zoom_mode_type")=="page" and tabOf("page_scroll")=="page" and tabOf("forced_ocr")=="more")
+ end
+ for tab=1,#d.tabs do
   d:selectTab(tab)
   for page=1,d.pages do
    d.page=page; d:update()
@@ -119,7 +130,7 @@ for _,options in ipairs({cre,kopt}) do
  p:onSuspend(); assert(not p.bottom_drawer and not ui.config.config_dialog)
  p:onCloseWidget(); assert(ui.config.onShowConfigMenu==original)
 end
-print("PASS: real CRE/KOPT schemas, native ConfigDialog apply/pickers, config hook, mutual exclusion, teardown")
+print("PASS: real CRE/KOPT schemas in five tabs (embedded fonts/styles and alt status bar moved), native ConfigDialog apply/pickers, config hook, mutual exclusion, teardown")
 ''')
 lua.execute(r'''
 G_reader_settings.data={kindle_drawer={full_refresh=true}}
@@ -252,7 +263,7 @@ for _,options in ipairs({cre,kopt}) do
  for _,size in ipairs({{1072,1448},{1448,1072},{600,800}}) do
   screen.w,screen.h=size[1],size[2]
   G_reader_settings.data={}; local p=Plugin:new{ui=makeReader(options)}; p:onKindleBottomDrawer(); local d=p.bottom_drawer
-  for tab=1,4 do
+  for tab=1,#d.tabs do
    d:selectTab(tab)
    local found={}
    for page=1,d.pages do
@@ -351,7 +362,7 @@ print("PASS: every available CRE/KOPT numeric editor, draft cancellation, defaul
 lua.execute(r'''
 for _,size in ipairs({{1072,1448},{1448,1072},{600,800}}) do
  screen.w,screen.h=size[1],size[2]
- for _,action in ipairs({{80,79,"Home"},{500,79,"ShowToc"},{575,79,"ShowBookmark"},{650,79,"ShowPageBrowser"},{375,-70,"ShowSkimtoDialog"}}) do
+ for _,action in ipairs({{80,79,"Home"},{448,79,"ShowToc"},{516,79,"ShowBookmark"},{584,79,"ShowPageBrowser"},{375,-70,"ShowSkimtoDialog"}}) do
   G_reader_settings.data={};local ui=makeReader(cre)
   function ui:getCurrentPage() return 369 end
   function ui.document:getPageCount() return 810 end
@@ -389,15 +400,15 @@ for _,item in ipairs(painted) do
  elseif item.kind=="rect" and item.y==math.floor(119*d.scale) then action_divider=item
  elseif item.kind=="rect" and item.y==math.floor(179*d.scale) then content_divider=item end
 end
-assert(action_icons==5 and aa and math.abs(aa.size-22*d.scale)<=1,"Aa matches the action row")
+assert(action_icons==6 and aa and math.abs(aa.size-22*d.scale)<=1,"Aa matches the action row")
 assert(title and title.x==math.floor(26*d.scale),"book title keeps its left alignment")
 assert(title.y==math.floor(150*d.scale-title.size/2),"book title is vertically centered in its band")
 assert(action_divider and action_divider.h==math.floor(2*d.scale))
 assert(content_divider and content_divider.h==math.floor(3*d.scale) and action_divider.h<content_divider.h)
 local function tap(x,y) d:onQuick_tap(nil,{pos={x=x*d.scale,y=y*d.scale}}) end
-tap(425,79);assert(p.bottom_drawer and not p.quick_actions_panel)
+tap(380,79);assert(p.bottom_drawer and not p.quick_actions_panel)
 p.bottom_drawer:selectTab(3);p.bottom_drawer:onClose();assert(p.quick_actions_panel)
-d=p.quick_actions_panel;tap(425,79);assert(p.bottom_drawer.panel_index==3)
+d=p.quick_actions_panel;tap(380,79);assert(p.bottom_drawer.panel_index==3)
 p.bottom_drawer:onClose();d=p.quick_actions_panel
 tap(721,79);assert(not p.quick_actions_panel)
 p:onQuickActionsPanel();d=p.quick_actions_panel;tap(375,400);assert(not p.quick_actions_panel)
@@ -428,7 +439,10 @@ ui.menu:onTapShowMenu({});assert(p.quick_actions_panel and not p.bottom_drawer)
 p.settings.bottom_enabled=false
 p.quick_actions_panel:showLayoutPanel();assert(not p.quick_actions_panel and ui.config.original_calls==1)
 p.settings.quick_actions_enabled=false
+ui.menu:onTapShowMenu({});assert(ui.menu.original_calls==0 and p.settings_menu and not p.quick_actions_panel)
+p.settings.kindle_menu=false
 ui.menu:onTapShowMenu({});assert(ui.menu.original_calls==1 and not p.quick_actions_panel)
+p.settings.kindle_menu=nil
 p.settings.enabled=true
 ui.menu:onSwipeShowMenu({direction="south"});assert(p.drawer)
 p:onCloseWidget()

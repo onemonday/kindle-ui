@@ -53,17 +53,69 @@ function Text:paintTo(bb,x,y)
  painted[#painted+1]={kind="text",text=text,x=x,y=y,size=self.face,bold=self.bold}
 end
 ''')
-for variant in ['book', 'book-landscape', 'editor', 'number', 'help', 'confirm', 'editor-landscape', 'font', 'layout', 'page', 'more', 'font-dark', 'more-dark', 'choice', 'choice-dark', 'layout-landscape']:
+lua.execute(r'''
+-- Menu items moved into the drawer, in KOReader's shapes and wording (samples).
+function previewReader(options, lang)
+ local ui=makeReader(options)
+ local ru=lang=="ru"
+ local function T(en,r) return ru and r or en end
+ local function sub(...) local t={} for i,v in ipairs({...}) do t[i]={text=v,callback=function() end} end return t end
+ local function check(text,on) return {text=text,checked_func=function() return on end,callback=function() end} end
+ local function radio(options,selected)
+  local t={} for i,o in ipairs(options) do t[i]={text=o,radio=true,checked_func=function() return i==selected end,callback=function() end} end
+  return t
+ end
+ local order={["KOMenu:menu_buttons"]={"navi","typeset","setting"},
+  navi={"navi_settings","autoturn"}, navi_settings={"toc_items_per_page","bookmarks_settings"},
+  typeset={"document_settings","set_render_style","style_tweaks","change_font","typography","page_overlap","highlight_options"},
+  setting={"taps_and_gestures","status_bar"}, taps_and_gestures={"follow_links","page_turns","scrolling","long_press"}}
+ function ui.menu:setUpdateItemTable()
+  local i={["KOMenu:menu_buttons"]={},navi={icon="n"},typeset={icon="t"},setting={icon="s"},taps_and_gestures={text="tg"}}
+  i.navi_settings={text=T("Settings","Настройки")}; i.toc_items_per_page={text=T("ToC entries per page","Пунктов оглавления на странице"),callback=function() end}
+  i.bookmarks_settings={text=T("Bookmarks","Закладки"),sub_item_table=sub("a")}
+  i.autoturn=check(T("Autoturn","Автолистание"),false)
+  i.document_settings={text=T("Document settings","Настройки документа"),sub_item_table=sub("a")}
+  i.set_render_style={text=T("Style: book","Стиль: книжный"),sub_item_table=radio({"web","book"},2)}
+  i.style_tweaks={text=T("Style tweaks","Твики стилей"),sub_item_table=sub("a")}
+  i.change_font={text_func=function() return T("Font: Literata","Шрифт: Literata") end,sub_item_table_func=function() return {
+   {text=T("Font settings","Настройки шрифтов"),sub_item_table=sub("a")},
+   {text=T("Font-family fonts","Шрифты для font-family"),sub_item_table=sub("a")},
+   radio({"Bookerly","Literata","Noto Serif"},2)[1],radio({"Bookerly","Literata","Noto Serif"},2)[2],radio({"Bookerly","Literata","Noto Serif"},2)[3]} end}
+  i.typography={text=T("Typography rules","Правила типографики"),sub_item_table=sub("a")}
+  i.page_overlap={text=T("Page overlap","Перекрытие страниц"),sub_item_table=sub("a")}
+  i.highlight_options={text=T("Highlights","Выделения"),sub_item_table=sub("a")}
+  i.follow_links={text=T("Links","Ссылки"),sub_item_table=sub("a")}
+  i.page_turns={text=T("Page turns","Листание"),sub_item_table={check(T("Taps","Касания"),true),check(T("Swipes","Свайпы"),true),
+   check(T("Invert page turn taps and swipes","Инвертировать касания и свайпы"),false),{text=T("Page turn animations","Анимация листания"),sub_item_table=sub("a")}}}
+  i.scrolling={text=T("Scrolling","Прокрутка"),sub_item_table=sub("a")}
+  i.long_press={text=T("Long-press on text","Удержание на тексте"),sub_item_table=sub("a")}
+  i.status_bar={text=T("Status bar","Строка состояния"),sub_item_table=sub("a")}
+  self.tab_item_table=require("ui/menusorter"):mergeAndSort(nil,i,order)
+ end
+ if options==kopt then ui.paging={} end
+ return ui
+end
+''')
+TABS = ['font', 'layout', 'page', 'reading', 'more']
+for variant in ['book', 'book-landscape', 'editor', 'number', 'help', 'confirm', 'editor-landscape', 'font', 'layout', 'page', 'reading', 'more', 'font-dark', 'more-dark', 'choice', 'choice-dark', 'layout-landscape', 'image', 'submenu', 'back-ru', 'back-ru-landscape']:
     lua.globals().night = variant.endswith('-dark')
-    lua.globals().tab_index = ['font','layout','page','more'].index(variant.split('-')[0])+1 if variant.split('-')[0] in ['font','layout','page','more'] else 2
+    base = variant.split('-')[0]
+    lua.globals().tab_index = TABS.index(base)+1 if base in TABS else 1 if base in ('image', 'back') else 4 if base == 'submenu' else 2
+    lua.globals().lang = 'ru' if '-ru' in variant else 'en'
+    lua.globals().kopt_preview = base == 'image'
     lua.globals().inline_preview = variant.split('-')[0]
     lua.globals().choice_preview = variant.startswith('choice')
     width,height = (1448,1072) if variant.endswith('landscape') else (1072,1448)
     lua.globals().preview_w, lua.globals().preview_h = width,height
     lua.execute('''
-G_reader_settings.data={language="en",night_mode=night}; screen.night_mode=night; painted={}
+G_reader_settings.data={language=lang,night_mode=night}; screen.night_mode=night; painted={}
 screen.w=preview_w; screen.h=preview_h
-local p=Plugin:new{ui=makeReader(cre)}; p:onKindleBottomDrawer(); p.bottom_drawer:selectTab(tab_index)
+local p=Plugin:new{ui=previewReader(kopt_preview and kopt or cre, lang)}
+p:onKindleBottomDrawer(inline_preview=="back" and function() end or nil); p.bottom_drawer:selectTab(tab_index)
+if inline_preview=="submenu" then
+ local d=p.bottom_drawer
+ for _,row in ipairs(d.page_rows) do if row.option.kd_row=="page_turns" then d:menuRowTap(row.option.kd_item,row.cols,300) end end
+end
 if choice_preview then p.bottom_drawer:showChoices(p.bottom_drawer:findOptionByName("block_rendering_mode")) end
 local d=p.bottom_drawer
 if inline_preview=="book" then

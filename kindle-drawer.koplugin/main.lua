@@ -6,6 +6,8 @@ local Dispatcher = require("dispatcher")
 local NetworkMgr = require("ui/network/manager")
 local InfoMessage = require("ui/widget/infomessage")
 local Drawer = require("drawer")
+local Layout = require("layout")
+local Items = require("menuitems")
 local tr = require("l10n").tr
 
 local Plugin = WidgetContainer:extend{ name = "kindle_drawer", is_doc_only = false }
@@ -23,10 +25,12 @@ function Plugin:init()
     self.settings.hidden = self.settings.hidden or {}
     self.ui.menu:registerToMainMenu(self)
     self:onDispatcherRegisterActions()
+    -- Before KOReader sorts its menu: keep a snapshot of the items and survive unknown sorting hints.
+    self.sort_guard = Layout.installSortGuard()
     -- Patch only this UI instance; keep the original entry points for teardown.
     self.hooks = {}
     local menu = self.ui.menu
-    for _, name in ipairs({ "onTapShowMenu", "onSwipeShowMenu", "onPressMenu", "onShowMenu", "onRebuildMenu" }) do
+    for _, name in ipairs({ "onTapShowMenu", "onSwipeShowMenu", "onPressMenu", "onShowMenu", "onRebuildMenu", "onMenuSearch" }) do
         local original = menu[name]
         if original then
             local hook = function(target, ...) return self:menuHook(name, original, target, ...) end
@@ -75,6 +79,10 @@ function Plugin:menuHook(name, original, menu, ...)
         local result = original(menu, ...)
         if self:onKindleSettingsMenu() then self.settings_menu:restoreState(state) end
         return result
+    elseif name == "onMenuSearch" and self:onKindleSettingsMenu() then
+        -- Dispatcher's Menu search: search the new tree, not the classic one.
+        self.settings_menu:onShowMenuSearch()
+        return true
     end
     return original(menu, ...)
 end
@@ -240,7 +248,9 @@ function Plugin:onKindleBottomDrawer(return_callback)
     self.bottom_drawer = BottomDrawer:new{
         return_callback = return_callback, owner = self, reader_config = config, ui = self.ui, document = config.document,
         configurable = config.configurable, config_options = config.options,
-        panel_index = self.settings.bottom_remember_tab ~= false and self.settings.bottom_tab or 1,
+        -- bottom_tab is the index saved by earlier versions.
+        panel_key = self.settings.bottom_remember_tab ~= false and (self.settings.bottom_tab_key or self.settings.bottom_tab) or nil,
+        layout_tabs = self:menuLayout().drawer_tabs,
     }
     config.config_dialog = self.bottom_drawer
     if self.ui.keyselection then self.ui.keyselection:stopHighlightIndicator(true) end
@@ -350,33 +360,20 @@ function Plugin:showNetworks()
     UIManager:show(require("ui/widget/networksetting"):new{ network_list = networks })
 end
 
--- MenuSorter moves placed items out of menu_items and tags each with its key as `id`.
-local function findMenuItem(tab_item_table, key)
-    local function find(items, chain)
-        for _, item in ipairs(items) do
-            if type(item) == "table" then
-                chain[#chain + 1] = item
-                if item.id == key or (item.sub_item_table and find(item.sub_item_table, chain)) then return true end
-                chain[#chain] = nil
-            end
-        end
-    end
-    for tab, items in ipairs(tab_item_table) do
-        local chain = {}
-        if find(items, chain) then return tab, chain end
-    end
-end
-
 -- Open the main menu already inside a plugin's submenu, so Back walks up the usual tree.
 function Plugin:openMenuItem(key)
     if self:onKindleSettingsMenu() then
-        local tab, chain = findMenuItem(self.settings_menu.tab_item_table, key)
-        if tab then self.settings_menu:openChain(tab, chain) end
+        self.settings_menu:openItem(key)
         return
     end
     local menu = self.ui.menu
     if not menu.tab_item_table then menu:setUpdateItemTable() end
-    local tab, chain = findMenuItem(menu.tab_item_table, key)
+    -- MenuSorter tags each placed item with its key as `id`.
+    local tab, chain
+    for i, items in ipairs(menu.tab_item_table) do
+        chain = Items.findChain(items, function(item) return item.id == key end)
+        if chain then tab = i; break end
+    end
     if tab then
         menu:onShowMenu(tab, true)
         local touch_menu = menu.menu_container[1]
@@ -387,29 +384,97 @@ function Plugin:openMenuItem(key)
     menu:onShowMenu()
 end
 
--- Kindle-style top menu: root page, or the tab's page with Back to the root.
-function Plugin:onKindleSettingsMenu(tab_index)
-    if not self:kindleMenuActive() then return false end
+-- "rolling" or "paging": which ReaderConfig options and drawer tabs apply.
+function Plugin:docKind()
+    local config = self.ui.config
+    local options = config and config.options
+    if (options and options.prefix == "kopt") or (not options and self.ui.paging) then return "paging" end
+    return "rolling"
+end
+
+function Plugin:bottomDrawerActive()
+    return self.settings.bottom_enabled ~= false and self.ui.config ~= nil and Device:isTouchDevice()
+end
+
+-- The new arrangement of the current KOReader menu tree (layout.lua). Cached per
+-- tree: setUpdateItemTable builds a new tree, so a rebuilt menu gets a new layout.
+function Plugin:menuLayout()
+    local menu = self.ui.menu
+    if not menu.tab_item_table then menu:setUpdateItemTable() end
+    local tree = menu.tab_item_table
+    if tree and not Layout.snapshotFor(tree) and self.sort_guard and not self.resorted then
+        -- Sorted before the guard was in place: sort again to see every item.
+        self.resorted = true
+        menu:setUpdateItemTable()
+        tree = menu.tab_item_table
+    end
+    local reader, kind, drawer = self.ui.document ~= nil, self:docKind(), self:bottomDrawerActive()
+    local cache = self.layout_cache
+    if cache and cache.tree == tree and cache.reader == reader and cache.kind == kind and cache.drawer == drawer then
+        return cache.layout
+    end
+    local can_list = Device:hasWifiToggle() and not (Device.isAndroid and Device:isAndroid())
+    local layout = Layout.build{
+        tree = tree, snapshot = Layout.snapshotFor(tree), reader = reader, kind = kind, drawer = drawer,
+        show_networks = can_list and function() self:showNetworks() end or nil,
+    }
+    self.layout_cache = { tree = tree, reader = reader, kind = kind, drawer = drawer, layout = layout }
+    return layout
+end
+
+-- Drawer rows for menu search: one page per drawer tab.
+function Plugin:drawerSearchPages()
+    if not self.ui.document or not self:bottomDrawerActive() then return {} end
+    local pages = {}
+    for _, tab in ipairs(self:menuLayout().drawer_tabs or {}) do
+        local items = {}
+        for _, seg in ipairs(tab) do if seg.item then items[#items + 1] = seg.item end end
+        if #items > 0 then
+            pages[#pages + 1] = { drawer_tab = tab.key, title = tr("Bottom drawer") .. " › " .. tab.title, items = items }
+        end
+    end
+    return pages
+end
+
+-- A search result in the drawer: open the drawer on its tab and walk the chain inline.
+function Plugin:openDrawerChain(tab_key, chain)
+    self:closeSettingsMenu()
+    if self:onKindleBottomDrawer() and self.bottom_drawer then self.bottom_drawer:openMenuChain(tab_key, chain) end
+end
+
+-- Kindle-style top menu: root page, a section with Back to the root, or book actions.
+-- tab_index is KOReader's; force opens it even when the stock menu is chosen (Quick actions ⋮).
+function Plugin:onKindleSettingsMenu(tab_index, force)
+    if not (self:kindleMenuActive() or (force and Device:isTouchDevice())) then return false end
     self:closePanels("settings_menu")
     local menu = self.ui.menu
     if not menu.tab_item_table then menu:setUpdateItemTable() end
-    local tab = tab_index and menu.tab_item_table[tab_index]
+    local tab = tab_index and menu.tab_item_table and menu.tab_item_table[tab_index]
     -- Like TouchMenu, never auto-run an action tab such as the file browser.
-    if tab and tab.remember == false then tab_index = nil end
+    local section = tab and tab.remember ~= false and Layout.TAB_SECTIONS[tab.id]
     if self.settings_menu then
-        if tab_index then self.settings_menu:openTab(tab_index) end
+        if section then self.settings_menu:openTab(section) end
         return true
     end
     if menu.menu_container then self:closeTopMenu() end -- the stock menu is open
     if self.ui.keyselection then self.ui.keyselection:stopHighlightIndicator(true) end
     local SettingsMenu = require("settingsmenu")
-    local widget = SettingsMenu:new{ owner = self, ui = self.ui, menu = menu, tab_item_table = menu.tab_item_table }
+    local widget = SettingsMenu:new{ owner = self, ui = self.ui, menu = menu, layout_data = self:menuLayout() }
     widget:closeConfigDialog()
     self.settings_menu = widget
     -- KOReader closes its menu through menu_container (item callbacks, reader teardown).
     menu.menu_container = widget
-    if tab_index then widget:openTab(tab_index) end
+    if section then widget:openTab(section) end
     UIManager:show(widget, widget.full_refresh and "full" or "flashui")
+    return true
+end
+
+-- Book actions page; Back closes it. Opens the Kindle-style menu even when the stock one is chosen.
+function Plugin:openBookActions()
+    if not self.ui.document then return false end
+    self:closeQuickActionsPanel()
+    if not self:onKindleSettingsMenu(nil, true) then return false end
+    self.settings_menu:openTab("book", true)
     return true
 end
 
@@ -439,6 +504,7 @@ function Plugin:onSuspend() self:closePanels() end
 function Plugin:onSetDimensions() self:closePanels("settings_menu") end
 function Plugin:onCloseWidget()
     self:closePanels()
+    if self.sort_guard then Layout.uninstallSortGuard(); self.sort_guard = nil end
     if self.ui.config and self.ui.config.onShowConfigMenu == self.bottom_hook then
         self.ui.config.onShowConfigMenu = self.bottom_original
     end

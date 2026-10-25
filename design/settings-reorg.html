@@ -1,0 +1,755 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Новая раскладка настроек KOReader в стиле Kindle</title>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0}
+.page{font-family:var(--font-sans,system-ui,sans-serif);color:var(--foreground,#222);font-size:14px;line-height:1.5}
+.page h3{font-size:15px;margin:26px 0 8px}
+.page p{margin:0 0 10px}
+.mut{color:var(--muted-foreground,#777)}
+.wrap{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}
+.side{flex:1 1 200px;min-width:200px;font-size:13px;line-height:1.45}
+.side h4{margin:0 0 6px;font-size:12px;font-weight:600;color:var(--muted-foreground,#777);text-transform:uppercase;letter-spacing:.04em}
+.seg{display:flex;border:1px solid var(--border,#ccc);border-radius:var(--radius,8px);overflow:hidden;margin-bottom:12px}
+.seg button{flex:1;border:0;background:transparent;color:inherit;font:inherit;padding:7px 6px;cursor:pointer}
+.seg button.on{background:var(--primary,#111);color:var(--primary-foreground,#fff)}
+.btn{display:block;width:100%;border:1px solid var(--border,#ccc);background:transparent;color:inherit;font:inherit;padding:7px 8px;border-radius:var(--radius,8px);cursor:pointer;margin-bottom:12px}
+.btn:disabled{opacity:.4;cursor:default}
+.side ul{margin:0;padding-left:16px;color:var(--muted-foreground,#666)}
+.side li{margin-bottom:4px}
+.side b{color:var(--foreground,#222);font-weight:600}
+.from{margin-top:10px;padding:8px 10px;border:1px dashed var(--border,#ccc);border-radius:var(--radius,8px);font-size:12.5px;min-height:56px}
+.from code{font-family:var(--font-mono,monospace);font-size:12px}
+/* device */
+.kindle{flex:0 0 auto;width:468px;background:#1d1d1f;border-radius:34px;padding:28px 24px 50px;position:relative}
+.kindle::after{content:"kindle";position:absolute;bottom:14px;left:0;right:0;text-align:center;color:#8d8d8d;font:600 17px/1 "Helvetica Neue",Arial,sans-serif}
+.screen{width:420px;height:560px;background:#fff;position:relative;overflow:hidden;color:#111;user-select:none;font-family:"Amazon Ember","Helvetica Neue",Helvetica,Arial,sans-serif}
+.status{height:30px;display:flex;align-items:center;padding:0 14px;font-size:12px;position:relative}
+.status .r{margin-left:auto;display:flex;align-items:center;gap:6px}
+.status .handle{position:absolute;left:50%;top:4px;transform:translateX(-50%);padding:4px 10px}
+.titlebar{height:48px;display:flex;align-items:center;padding:0 6px 0 4px;border-bottom:1px solid #c8c8c8}
+.titlebar .ttl{flex:1;font-size:16px;font-weight:700;padding-left:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.titlebar .back + .ttl{padding-left:0}
+.ib{width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:4px}
+.vp{position:absolute;left:0;right:0;bottom:0;top:79px;overflow-y:auto;scrollbar-width:thin}
+.row{display:flex;align-items:center;padding:0 24px;position:relative;cursor:pointer;min-height:56px}
+.row::after{content:"";position:absolute;left:24px;right:24px;bottom:0;height:1px;background:#e2e2e2}
+.row.nodiv::after{display:none}
+.row:hover{background:#f4f4f4}
+.row .ico{width:24px;margin-right:16px;display:flex;flex:0 0 auto}
+.row .txt{flex:1;min-width:0;padding:9px 0}
+.row .lbl{font-size:15.5px;font-weight:600;line-height:1.25}
+.row .sub{font-size:12.5px;color:#555;margin-top:3px;line-height:1.3}
+.row .val{font-size:13.5px;color:#333;margin-left:12px;max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .chev{margin-left:14px;display:flex}
+.row.act .lbl{font-weight:500}
+.tag{display:inline-block;font-size:10.5px;font-weight:600;color:#555;border:1px solid #bbb;border-radius:3px;padding:0 4px;margin-left:6px;vertical-align:2px;line-height:15px}
+.tag.bk{color:#fff;background:#555;border-color:#555}
+.tag.mv{color:#111;border-color:#111}
+.side .tag{color:var(--muted-foreground,#666);border-color:var(--border,#bbb);background:transparent}
+.side .tag.bk{background:var(--muted,#eee);color:var(--foreground,#222);border-color:transparent}
+.radio{width:20px;height:20px;border:2px solid #111;border-radius:50%;margin-right:16px;flex:0 0 auto;display:flex;align-items:center;justify-content:center}
+.radio.on::after{content:"";width:10px;height:10px;border-radius:50%;background:#111}
+.sw{width:46px;height:26px;border-radius:13px;border:2px solid #111;position:relative;margin-left:12px;flex:0 0 auto}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;border:2px solid #111;background:#fff}
+.sw.on{background:#111}.sw.on::after{left:22px;border-color:#fff}
+.head{padding:14px 24px 4px;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#666;border-top:1px solid #8f8f8f;margin-top:6px}
+.head.first{border-top:0;margin-top:0}
+.pop{position:absolute;right:8px;top:70px;background:#fff;border:1.5px solid #111;border-radius:4px;width:236px;z-index:5}
+.pop div{padding:13px 16px;font-size:14.5px;cursor:pointer;border-bottom:1px solid #e2e2e2}
+.pop div:last-child{border-bottom:0}
+.toast{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);background:#111;color:#fff;font-size:13px;padding:9px 14px;border-radius:6px;max-width:360px;text-align:center;z-index:9;opacity:0;transition:opacity .15s;pointer-events:none}
+.toast.show{opacity:1}
+.book{position:absolute;top:44px;left:30px;right:30px;font:15px/1.6 Georgia,serif;text-align:justify;color:#222}
+/* bottom drawer */
+.bd{position:absolute;left:0;right:0;bottom:0;height:330px;background:#fff;border-top:1px solid #111;display:flex;flex-direction:column}
+.bd .tabs{height:36px;display:flex;align-items:stretch;border-bottom:1px solid #111;flex:0 0 auto}
+.bd .tabs div{flex:1;display:flex;align-items:center;justify-content:center;font-size:13px;cursor:pointer;position:relative}
+.bd .tabs div.on{font-weight:700}
+.bd .tabs div.on::after{content:"";position:absolute;left:18%;right:18%;bottom:0;height:3px;background:#111}
+.bd .tabs .bk{flex:0 0 auto;padding:0 14px;justify-content:flex-start;font-weight:400}
+.bd .tabs .ttl2{justify-content:flex-start;font-weight:700;flex:3}
+.bd .list{flex:1;overflow-y:auto;scrollbar-width:thin}
+.bd .r{display:flex;align-items:center;min-height:40px;padding:4px 18px;border-bottom:1px solid #e2e2e2;font-size:12.5px;cursor:pointer}
+.bd .r .n{flex:0 0 150px;font-weight:700;padding-right:8px;line-height:1.25}
+.bd .r .c{flex:1;color:#333;display:flex;align-items:center;gap:6px;min-width:0}
+.bd .r .c span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bd .r.m .n{flex:1}
+.bd .r .ch{margin-left:auto;font-size:18px;line-height:1}
+.bd .sl{flex:1;height:1px;background:#111;position:relative;margin:0 8px}
+.bd .sl::after{content:"";position:absolute;left:var(--p,40%);top:-6px;width:13px;height:13px;border-radius:50%;background:#fff;border:1.5px solid #111}
+.bd .foot{height:28px;border-top:1px solid #e2e2e2;display:flex;align-items:center;padding:0 18px;font-size:11.5px;color:#444;flex:0 0 auto}
+.bd .r.sec{min-height:0;padding:9px 18px 3px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#666;border-bottom:0;cursor:default}
+/* tables */
+.tbl-tools{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 8px}
+.tbl-tools input{flex:1 1 220px;padding:7px 9px;border:1px solid var(--border,#ccc);border-radius:var(--radius,8px);background:transparent;color:inherit;font:inherit}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.chips button{border:1px solid var(--border,#ccc);background:transparent;color:inherit;font:inherit;font-size:12px;padding:3px 9px;border-radius:999px;cursor:pointer}
+.chips button.on{background:var(--primary,#111);color:var(--primary-foreground,#fff);border-color:transparent}
+.tblbox{max-height:420px;overflow:auto;border:1px solid var(--border,#ddd);border-radius:var(--radius,8px)}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{text-align:left;padding:6px 9px;border-bottom:1px solid var(--border,#e4e4e4);vertical-align:top}
+th{position:sticky;top:0;background:var(--card,#f6f6f6);font-weight:600;z-index:1}
+td.old{color:var(--muted-foreground,#666);width:46%}
+td .k{font-family:var(--font-mono,monospace);font-size:11.5px;color:var(--muted-foreground,#888)}
+.pill{display:inline-block;font-size:11px;padding:0 6px;border-radius:4px;background:var(--muted,#eee);color:var(--muted-foreground,#555);margin-left:4px}
+.pill.dr{background:var(--accent-surface,#e9e4ff);color:var(--accent-surface-foreground,#432)}
+.rules{counter-reset:r;padding-left:0;list-style:none;margin:0}
+.rules li{counter-increment:r;position:relative;padding-left:28px;margin-bottom:8px}
+.rules li::before{content:counter(r);position:absolute;left:0;top:0;width:20px;height:20px;border-radius:50%;background:var(--muted,#eee);font-size:12px;display:flex;align-items:center;justify-content:center;font-weight:600}
+.cnt{font-size:12px}
+</style>
+</head>
+<body>
+<div class="page">
+
+<p>Верхнее меню становится настройками устройства и программы: 10 разделов по образцу Kindle (Wi‑Fi, Экран, Устройство, Справка) и Android (Питание, Жесты и кнопки, Приложения). В каждом разделе одна тема. Всё, что появляется только в открытой книге и меняет текст, страницу или поведение при чтении, переезжает в нижнюю шторку, у неё становится пять вкладок. Действия с книгой (оглавление, переход, поиск по книге) уходят из настроек в меню «⋮». Пункты собираются из меню KOReader по id, поэтому их состояние и действия остаются штатными.</p>
+
+<div class="wrap">
+  <div class="kindle"><div class="screen" id="scr"></div></div>
+  <div class="side">
+    <h4>Где открыто</h4>
+    <div class="seg" id="ctx"><button data-v="fm" class="on">Файлы</button><button data-v="rd">Книга</button></div>
+    <button class="btn" id="bdbtn" disabled>Открыть нижнюю шторку</button>
+    <div class="seg" id="doc" style="display:none"><button data-v="epub" class="on">EPUB</button><button data-v="pdf">PDF</button></div>
+    <h4>Обозначения</h4>
+    <ul>
+      <li><span class="tag bk">книга</span> пункт есть только при открытой книге.</li>
+      <li><span class="tag">Kobo</span> <span class="tag">Android</span> пункт есть только на этих устройствах; на Kindle он скрыт, как и сейчас.</li>
+      <li><span class="tag mv">из меню</span> в шторке: пункт перенесён из верхнего меню.</li>
+      <li>Наведите на пункт, чтобы увидеть, откуда он взят.</li>
+    </ul>
+    <div class="from" id="from"><span class="mut">Откуда пункт: наведите на строку</span></div>
+  </div>
+</div>
+
+<h3>Нижняя шторка: что добавляется</h3>
+<p>Сейчас в шторке только параметры нижней панели KOReader. К ним добавляются пункты бывших вкладок «Навигация» и «Оформление», а также строка состояния, листание, ссылки и выделения из «Основных». Они открываются внутри шторки так же, как сейчас открывается выбор значения: строкой со стрелкой и экраном с «‹ Назад». Новая вкладка «Чтение» повторяет вкладку Reading Settings из меню Aa на Kindle. Три параметра панели KOReader переезжают внутри шторки ближе к своей теме: «Встроенные шрифты» на «Шрифт», «Встроенные стили» на «Макет», «Альт. строка состояния» на «Страницу».</p>
+<p>Параметры панели KOReader хранятся для каждой книги, удержание делает значение умолчанием. Листание, прокрутку, ссылки, удержание на тексте, выделения, строку состояния и настройки поиска KOReader хранит один раз для всех книг. Поэтому вкладка «Чтение» начинается с заголовка «Для всех книг», а удержание на этих строках показывает справку, как в верхнем меню.</p>
+<p>Для PDF, DjVu и CBZ шторка строится из панелей <code>koptoptions.lua</code> (переключатель EPUB/PDF в макете). Первая вкладка там называется «Изображение»: контраст, порог белого, дизеринг, перекомпоновка. Обрезка стоит в «Макете», масштаб и подгонка в «Странице», OCR и язык документа в «Ещё». Шрифт, стиль, типографика и стабильные номера страниц есть только у EPUB-подобных книг, в PDF их нет.</p>
+
+<h3>Действия с книгой</h3>
+<p>Оглавление, закладки, Book map, Page browser, переход на страницу, Skim, переходы назад и вперёд, поиск по книге и по закладкам, перевод страницы, статус и информация о книге не являются настройками. В Kindle они лежат в меню «⋮» на панели книги. Предлагаю то же: «⋮» справа в Quick actions panel открывает этот список. Сюда же попадают «Не показывать обложку на экране сна» (KOReader хранит её в настройках книги) и «Отправить/Получить прогресс сейчас» из синхронизации прогресса. Если панель выключена, тот же список открывается из «⋮» в заголовке настроек, пункт «Действия с книгой» (в макете переключите на «Книга» и нажмите «⋮»). Жесты и Dispatcher продолжают вызывать эти действия напрямую.</p>
+
+<h3>Где теперь каждый пункт</h3>
+<p class="mut cnt" id="cnt"></p>
+<div class="tbl-tools"><input id="q" placeholder="Поиск по старому или новому названию, например sleep или шрифт"></div>
+<div class="chips" id="chips"></div>
+<div class="tblbox"><table><thead><tr><th>Было в KOReader</th><th>Стало</th></tr></thead><tbody id="tb"></tbody></table></div>
+
+<h3>Пункты плагинов</h3>
+<p>Сейчас KOReader ставит пункт плагина по ключу из файлов порядка меню. Ключа нет в порядке и нет <code>sorting_hint</code>, тогда пункт попадает в конец первой вкладки с префиксом «NEW:» (<code>frontend/ui/menusorter.lua:161-186</code>). Если <code>sorting_hint</code> указывает на отсутствующий пункт, сборка меню падает (там же, строка 181). Новое меню раскладывает пункты так:</p>
+<ol class="rules">
+  <li><b>Известный ключ.</b> Таблица раскладки плагина Kindle Drawer задаёт место для всех 37 плагинов KOReader и для LocalSend, Simple UI и самого Kindle Drawer (таблица ниже).</li>
+  <li><b>Неизвестный ключ с <code>sorting_hint</code></b> встаёт туда, куда переехал ближайший пункт-предок из подсказки, у которого есть запись в таблице раскладки. Например, <code>network</code> → «Wi‑Fi и сеть», <code>screen</code> и <code>screensaver</code> → «Экран и подсветка», <code>device</code> → «Устройство», <code>physical_buttons_setup</code> → «Жесты и кнопки › Физические кнопки», <code>filemanager_settings</code> → «Библиотека», <code>tools</code>, <code>more_tools</code>, <code>search</code>, <code>main</code>, <code>help</code> → «Приложения и плагины». Подсказки <code>navi</code>, <code>typeset</code> и <code>selection_text</code> ведут в «Другие плагины» с пометкой «книга»: по подсказке нельзя отличить действие от настройки текста. Неизвестная подсказка и подсказка на пункт без подменю тоже ведут в «Другие плагины».</li>
+  <li><b>Ключ без подсказки</b> попадает в группу «Другие плагины» раздела «Приложения и плагины». Префикс «NEW:», который дописывает KOReader, срезается.</li>
+  <li><b>Страховка.</b> До сортировки плагин запоминает все ключи меню, а после раскладки проверяет, что каждый попал в новое дерево. Пропущенный пункт добавляется в «Другие плагины» и пишется в лог. Так новый пункт в будущей версии KOReader не потеряется.</li>
+  <li><b>Пункт только для книги</b> (плагин с <code>is_doc_only</code> или пункт, который есть только в меню чтения) показывается в «Других плагинах» только при открытой книге. В шторку и в «⋮» попадают только пункты из таблицы раскладки.</li>
+  <li><b>Остальное не меняется:</b> действия Dispatcher, кнопки в окне удержания файла, «Открыть с помощью», кнопки словаря. «Управление плагинами» и «Отключить сторонние плагины и патчи» лежат в «Приложениях», удержание пункта плагина показывает его описание. «Классическое меню KOReader» в «⋮» показывает штатную раскладку.</li>
+</ol>
+<div class="tblbox" style="margin-top:10px"><table><thead><tr><th>Плагин</th><th>Ключ в меню</th><th>Было</th><th>Стало</th></tr></thead><tbody id="pl"></tbody></table></div>
+
+<h3>Что учесть при реализации</h3>
+<p>Это нашли ревьюеры (Opus 5.5 и GPT-6-Astra), я сверил с исходниками KOReader. Пункт с неизвестным <code>sorting_hint</code> роняет <code>MenuSorter:sort</code> раньше, чем плагин видит дерево (<code>menusorter.lua:179-182</code>, без pcall в <code>readermenu.lua:350</code>). Поэтому плагин проверяет подсказки в <code>menu_items</code> до сортировки и заменяет неизвестные на <code>more_tools</code>. Там же он оборачивает <code>addToMainMenu</code> каждого плагина: так видны пункты только с <code>text_func</code>, которым MenuSorter не ставит id, и известно, чей пункт и есть ли у плагина <code>is_doc_only</code>.</p>
+<p>Часть строк макета — дети подменю без своего id. Full refresh rate и перерисовки экрана сна лежат внутри <code>screen_eink_opt</code>, «Домашняя папка» и «Настройки истории» внутри <code>filebrowser_settings</code>, «Настройки шрифтов» и «Шрифты для font-family» внутри <code>change_font</code>, <code>page_map</code> и <code>bookmarks_settings</code> внутри <code>navi_settings</code>. Их вынимает адаптер: находит по позиции со сверкой текста и удаляет из старого родителя. Если пункт не найден, он остаётся в родителе. Coverbrowser вставляет свой пункт в <code>filebrowser_settings</code> четвёртым, адаптер это учитывает. Строка «Сети Wi‑Fi» вызывает то же, что удержание пункта Wi‑Fi.</p>
+<p>Вид, сортировку, настройки списка и «При запуске открывать» KOReader создаёт только в файловом менеджере, поэтому в книге «Библиотека» показывает только «Открыть», архив и данные книг. «Поиск по меню» KOReader ищет по старому дереву через TouchMenu (<code>readermenu.lua:545</code>, <code>touchmenu.lua:1305</code>), с новым меню он не сработает, нужен свой поиск. <code>openMenuItem</code> и переходы к вкладкам в <code>main.lua</code> переводятся на новые разделы. Из пользовательских <code>*_menu_order.lua</code> соблюдается <code>KOMenu:disabled</code>, а перестановки пользователя видны только в классическом меню.</p>
+
+<h3>Что решить</h3>
+<p>Первое: пять вкладок в шторке. «Чтение» можно слить с «Ещё», тогда вкладок останется четыре, как сейчас, а «Ещё» станет длинной. Второе: меню «⋮» в Quick actions panel добавляет на панель кнопку. Можно обойтись «⋮» в настройках, но тогда действия с книгой будут на два касания дальше. Третье: Calibre в «Wi‑Fi и сеть», потому что основное его действие — беспроводное подключение. Поиск по каталогу Calibre при этом остаётся в «Библиотеке». Четвёртое: GPT-6-Astra предлагает перенести «Листание» и «Прокрутку» из шторки в «Жесты и кнопки», раз это не настройки текста. Тогда в файловом менеджере их там не будет: KOReader создаёт эти пункты только в книге. В макете они остаются в шторке под «Для всех книг».</p>
+
+</div>
+<script>
+// ------------------------------------------------------------------ data
+// t: label; f: where it was in KOReader (tab › …), k: menu id; sub: children; keep: KOReader submenu unchanged
+// ro: reader only; fm: file manager only; dev: device condition; act: action; check/radio: control
+const T = (t, x={}) => Object.assign({t}, x);
+const R = (opts, sel) => ({radio: opts, sel});
+const H = (h) => ({head: h});
+const keep = 'подменю KOReader без изменений';
+
+const ROOT = [
+ T('Wi‑Fi и сеть', {ico:'wifi', hint:'Wi‑Fi, прокси, передача файлов', sub:[
+   T('Wi‑Fi', {check:true, k:'network_wifi', f:'General › Network › Wi-Fi connection'}),
+   T('Сети Wi‑Fi', {act:1, k:'network_wifi', f:'General › Network › Wi-Fi connection (было удержанием пункта)', hint:'Список сетей и подключение'}),
+   T('Wi‑Fi (настройки системы)', {act:1, k:'network_wifi', f:'General › Network › Wi-Fi settings', dev:'Android'}),
+   T('Если Wi‑Fi выключен', Object.assign(R(['включить','спросить','ничего не делать'],1), {k:'network_before_wifi_action', f:'General › Network › Action when Wi-Fi is off'})),
+   T('После работы с сетью', Object.assign(R(['оставить включённым','выключить','спросить'],1), {k:'network_after_wifi_action', f:'General › Network › Action when done with Wi-Fi'})),
+   T('Восстанавливать Wi‑Fi после сна', {check:true, k:'network_restore', f:'General › Network › Restore Wi-Fi connection on resume'}),
+   T('Отключать Wi‑Fi без активности', {check:false, k:'network_powersave', f:'General › Network › Disable Wi-Fi connection when inactive'}),
+   T('Закрывать список сетей после подключения', {check:true, k:'network_dismiss_scan', f:'General › Network › Dismiss Wi-Fi scan popup', dev:'Kobo'}),
+   T('HTTP-прокси', {check:false, k:'network_proxy', f:'General › Network › HTTP proxy'}),
+   T('Сведения о сети', {act:1, k:'network_info', f:'General › Network › Network info'}),
+   H('Передача файлов и удалённый доступ'),
+   T('Calibre', {k:'calibre', f:'Tools › Calibre', hint:'Беспроводная передача книг с компьютера', sub:[T('Подключиться',{act:1}), T('Настройки поиска',{keep}), T('Настройки беспроводного подключения',{keep})]}),
+   T('LocalSend', {k:'localsend', f:'General › Network › LocalSend (сторонний плагин без места в меню)', hint:'Передача файлов с телефона и компьютера', keep}),
+   T('SSH-сервер', {k:'ssh', f:'General › Network › SSH server', sub:[T('SSH-сервер',{check:false}), T('Порт: 2222'), T('Открытый ключ'), T('Вход только по ключу',{check:false}), T('Вход без пароля (опасно)',{check:false}), T('Запускать вместе с KOReader',{check:false}), T('Закрывать соединения при остановке',{check:true}), T('Показывать статус SSH в строке состояния',{check:false})]}),
+ ]}),
+ T('Экран и подсветка', {ico:'sun', hint:'Подсветка, тёмный режим, экран блокировки, поворот', sub:[
+   T('Подсветка и теплота', {act:1, k:'frontlight', f:'General › Frontlight'}),
+   T('Тёмный режим', {check:false, k:'night_mode', f:'General › Night mode'}),
+   T('Расписание теплоты и тёмного режима', {k:'autowarmth', f:'General › Screen › Auto warmth and night mode', hint:'По солнцу или по расписанию', keep}),
+   T('Автоматическое затемнение', {k:'autodim', f:'General › Screen › Automatic dimmer', sub:[T('Время до затемнения'), T('Длительность затемнения'), T('Яркость при затемнении')]}),
+   H('Экран блокировки'),
+   T('Экран сна', {k:'screensaver', f:'General › Screen › Sleep screen', hint:'Обложка, картинка или сообщение', sub:[
+      T('Обои', {keep}),
+      T('Сообщение на экране сна', {keep}),
+      T('Перерисовки против остаточного изображения', {k:'screen_eink_opt', f:'General › Screen › E-ink settings › Sleep screen anti-ghosting redraws', hint:'Перенесено из настроек E-ink'}),
+   ]}),
+   T('Обложка для системы', {k:'coverimage', f:'General › Screen › Cover image', ro:1, dev:'Android, PocketBook', keep}),
+   H('Изображение'),
+   T('Поворот', {k:'screen_rotation', f:'General › Screen › Rotation', keep}),
+   T('Размер интерфейса', Object.assign(R(['авто (300)','маленький (120)','средний (160)','крупный (240)','очень крупный (320)','огромный (480)','максимальный (640)','своё значение'],0), {k:'screen_dpi', f:'General › Screen › Screen DPI', hint:'Масштаб всех окон, нужен перезапуск'})),
+   T('Цветной экран', {check:true, k:'color_rendering', f:'General › Screen › Color rendering', dev:'цветной экран'}),
+   T('Полноэкранный режим', {check:true, k:'fullscreen', f:'General › Screen › Fullscreen', dev:'Android'}),
+   T('Тайм-аут экрана', {k:'screen_timeout', f:'General › Screen › Screen timeout', dev:'Android', keep}),
+   T('Обновление E-ink', {k:'screen_eink_opt', f:'General › Screen › E-ink settings', hint:'Вспышки при касании, скорость обновления', sub:[
+      T('Медленнее прокручивать', {check:false, f:'… › E-ink settings › Use smaller panning rate'}),
+      T('Мигать кнопками и пунктами меню', {check:true, f:'… › E-ink settings › Flash buttons and menu items'}),
+      T('Мигать клавиатурой', {check:true, f:'… › E-ink settings › Flash keyboard'}),
+      T('Избегать обязательных чёрных вспышек', {check:false, f:'… › E-ink settings › Avoid mandatory black flashes in UI'}),
+      T('Скорость и качество обновления', {dev:'PocketBook, reMarkable', f:'… › E-ink settings › Refresh speed/fidelity', keep}),
+   ]}),
+ ]}),
+ T('Питание и батарея', {ico:'battery', hint:'Автосон, выключение, чехол, оповещения', sub:[
+   T('Автосон', {k:'autosuspend', f:'General › Device › Autosuspend timeout', value:'15 мин'}),
+   T('Автовыключение', {k:'autoshutdown', f:'General › Device › Autoshutdown timeout', value:'3 дн'}),
+   T('Режим ожидания', {k:'autostandby', f:'General › Device › Autostandby timeout / Auto-standby settings', dev:'Kobo, PocketBook'}),
+   T('Не засыпать', {check:false, k:'keep_alive', f:'Tools › More tools › Keep alive', hint:'Временно запрещает автосон'}),
+   H('Чехол и кнопки'),
+   T('Отключить события чехла', {check:false, k:'cover_events', f:'General › Device › Disable cover events'}),
+   T('Игнорировать все события чехла', {check:false, k:'ignore_sleepcover', f:'General › Device › Ignore all sleepcover events', dev:'Kobo'}),
+   T('Не просыпаться при открытии чехла', {check:false, k:'ignore_open_sleepcover', f:'General › Device › Ignore sleepcover wakeup events', dev:'Kobo'}),
+   T('Просыпаться от кнопки листания', {check:false, k:'pageturn_power', f:'General › Device › Wake up on page-turn button press', dev:'Kobo'}),
+   T('Индикатор при зарядке', {check:true, k:'charging_led', f:'General › Device › Turn on the power LED when charging', dev:'Kobo'}),
+   T('Оптимизация батареи', {k:'ignore_battery_optimizations', f:'General › Device › Battery optimizations', dev:'Android'}),
+   H('Состояние'),
+   T('Оповещения о батарее и памяти', {k:'device_status_alarm', f:'General › Device › Device status alerts', keep}),
+   T('Статистика батареи', {act:1, k:'battery_statistics', f:'Tools › More tools › Battery statistics'}),
+ ]}),
+ T('Жесты и кнопки', {ico:'hand', hint:'Жесты, открытие меню, кнопки «Назад» и листания', sub:[
+   T('Менеджер жестов', {k:'gesture_manager', f:'General › Taps and gestures › Gesture manager', keep}),
+   T('Обзор жестов', {act:1, k:'gesture_overview', f:'General › Taps and gestures › Gesture overview'}),
+   T('Интервалы жестов', {k:'gesture_intervals', f:'General › Taps and gestures › Gesture intervals', keep}),
+   T('Игнорировать удержание в углах', {check:false, k:'ignore_hold_corners', f:'General › Taps and gestures › Ignore long-press on corners'}),
+   T('Отключить двойное касание', {check:true, k:'screen_disable_double_tap', f:'General › Taps and gestures › Disable double tap'}),
+   T('Открытие меню', {k:'menu_activate', f:'General › Taps and gestures › Activate menu', sub:[T('Касанием',{check:true}), T('Свайпом',{check:true}), T('Сразу показывать нижнее меню',{check:false})]}),
+   H('Кнопки'),
+   T('Кнопка «Назад»', {f:'General › Navigation (кнопки «Назад»)', sub:[
+      T('«Назад» для выхода', Object.assign(R(['спросить','всегда','отключено'],0), {k:'back_to_exit', f:'General › Navigation › Back to exit'})),
+      T('«Назад» в списке файлов', Object.assign(R(['выход','в родительскую папку'],1), {k:'back_in_filemanager', f:'General › Navigation › Back in file browser'})),
+      T('«Назад» в книге', Object.assign(R(['выход','к списку файлов','к предыдущему месту','к предыдущей прочитанной странице'],2), {k:'back_in_reader', f:'General › Navigation › Back in reader'})),
+      T('Backspace работает как «Назад»', {check:false, k:'backspace_as_back', f:'General › Navigation › Backspace works as back button', dev:'клавиатура'}),
+      T('Полностью игнорировать «Назад»', {check:false, k:'android_back_button', f:'General › Navigation › Ignore back button completely', dev:'Android'}),
+   ]}),
+   T('Физические кнопки', {k:'physical_buttons_setup', f:'General › Navigation › Physical buttons', dev:'кнопки', sub:[
+      T('Отключить автоповтор', {check:false}), T('Поменять кнопки листания', {check:false}),
+      T('Поменять левые кнопки листания', {check:false, dev:'D-pad'}), T('Поменять правые кнопки листания', {check:false, dev:'D-pad'}),
+      T('Курсорные клавиши как кнопки действий', {check:false, dev:'D-pad'}), T('Листать клавишами влево и вправо', {check:false, dev:'D-pad'}),
+      T('Кнопка нажатия запускает сочетания', {check:false, k:'button_press_does_hotkeys', f:'плагин hotkeys на устройстве, sorting_hint physical_buttons_setup'}),
+      T('Сочетания клавиш', {k:'hotkeys', f:'плагин hotkeys, sorting_hint physical_buttons_setup', keep}),
+      T('Набор текста запускает поиск', {check:false, ro:1, k:'a_type_to_search', f:'плагин hotkeys'}),
+   ]}),
+   T('Листание кнопками громкости', {check:false, k:'android_volume_keys', f:'General › Navigation › Volume key page turning', dev:'Android'}),
+   T('Тактильный отклик', {check:false, k:'android_haptic_feedback', f:'General › Navigation › Force haptic feedback', dev:'Android'}),
+ ]}),
+ T('Язык и словари', {ico:'globe', hint:'Язык, клавиатура, словари, Википедия, перевод', sub:[
+   T('Язык интерфейса', Object.assign(R(['English','Deutsch','Français','Русский','Українська','中文'],3), {k:'language', f:'General › Language'})),
+   T('Клавиатура', {k:'keyboard_layout', f:'General › Device › Keyboard', keep}),
+   T('Внешняя клавиатура', {k:'external_keyboard', f:'General › Device › External Keyboard', keep}),
+   T('Дополнительные шрифты интерфейса', {k:'font_ui_fallbacks', f:'General › Device › Additional UI fallback fonts', keep}),
+   T('Языковые модули', {k:'language_support', f:'General › Document › Language support plugins', hint:'Японский: словоформы для словаря', keep}),
+   H('Словари'),
+   T('Поиск в словаре', {act:1, k:'dictionary_lookup', f:'Search › Dictionary lookup'}),
+   T('История словаря', {act:1, k:'dictionary_lookup_history', f:'Search › Dictionary lookup history'}),
+   T('Словарный запас', {act:1, k:'vocabbuilder', f:'Search › Vocabulary builder', hint:'Карточки со словами, которые вы искали'}),
+   T('Настройки словарей', {k:'dictionary_settings', f:'Search › Settings › Dictionary settings', keep}),
+   H('Википедия и перевод'),
+   T('Поиск в Википедии', {act:1, k:'wikipedia_lookup', f:'Search › Wikipedia lookup'}),
+   T('История Википедии', {act:1, k:'wikipedia_history', f:'Search › Wikipedia history'}),
+   T('Настройки Википедии', {k:'wikipedia_settings', f:'Search › Settings › Wikipedia settings', keep}),
+   T('Настройки перевода', {k:'translation_settings', f:'Search › Settings › Translation settings', ro:1, keep}),
+ ]}),
+ T('Библиотека', {ico:'books', hint:'Вид списка, сортировка, история, метаданные', sub:[
+   H('Открыть'),
+   T('Список файлов', {act:1, ro:1, k:'filemanager', f:'Вкладка-действие Files в меню книги'}),
+   T('Продолжить чтение', {act:1, fm:1, k:'reader', f:'Вкладка-действие Continue reading в библиотеке'}),
+   T('Меню «+»', {act:1, fm:1, k:'plus_menu', f:'Вкладка-действие «+» в библиотеке', dev:'без сенсора'}),
+   T('История', {act:1, k:'history', f:'KOReader › History'}),
+   T('Избранное', {act:1, k:'favorites', f:'KOReader › Favorites'}),
+   T('Коллекции', {act:1, k:'collections', f:'KOReader › Collections'}),
+   T('Все закладки', {act:1, k:'bookmark_browser', f:'KOReader › Bookmark browser'}),
+   T('Последняя книга', {act:1, k:'open_last_document', f:'KOReader › Open last document', fm:1}),
+   T('Предыдущая книга', {act:1, k:'open_previous_document', f:'KOReader › Open previous document', ro:1}),
+   T('Поиск файлов', {act:1, k:'file_search', f:'Search › File search', fm:1}),
+   T('Последние результаты поиска файлов', {act:1, k:'file_search_results', f:'Search › Last file search results', fm:1}),
+   T('Поиск в каталоге Calibre', {act:1, k:'find_book_in_calibre_catalog', f:'Search › Calibre metadata search'}),
+   T('OPDS-каталоги', {act:1, k:'opds', f:'Search › OPDS catalog', fm:1, hint:'Онлайн-библиотеки'}),
+   H('Вид и порядок'),
+   T('Вид', {fm:1, value:'список с обложками', k:'filemanager_display_mode', f:'Files › Display mode', sub:[
+      T('Вид библиотеки', R(['классический','мозаика с обложками','мозаика с текстом','список с обложками и данными','список с данными без обложек','список с обложками и именами файлов'],3)),
+      T('Этот вид везде', {check:false}), T('Вид истории', {value:'как в библиотеке'}), T('Вид коллекций', {value:'как в библиотеке'}),
+   ]}),
+   T('Сортировка', Object.assign(R(['имя','имя (естественная)','дата чтения','дата изменения','размер','тип','процент','название','авторы','серия'],0), {fm:1, k:'sort_by', f:'Files › Sort by'})),
+   T('Обратный порядок', {check:false, fm:1, k:'reverse_sorting', f:'Files › Reverse sorting'}),
+   T('Игнорировать артикли', {check:false, fm:1, k:'sort_ignore_articles', f:'Files › Ignore leading articles'}),
+   T('Папки вперемешку с файлами', {check:false, fm:1, k:'sort_mixed', f:'Files › Folders and files mixed'}),
+   T('Показывать книги', {value:'все', fm:1, k:'show_filter', f:'Files › Book status', hint:'Новые, читаю, отложено, прочитано'}),
+   T('Настройки списка', {fm:1, k:'filebrowser_settings', f:'Files › Settings', sub:[
+      T('Файлы из подпапок', {check:false}), T('Скрытые файлы', {check:false}), T('Неподдерживаемые файлы', {check:false}),
+      T('Спрашивать перед открытием', {check:false}), T('Показывать родительскую папку', {check:true}), T('Отметка коллекции', {check:true}),
+      T('Классический вид', {keep}), T('Мозаика и список', {k:'coverbrowser', f:'плагин coverbrowser', keep}),
+      T('Строк в информационных списках', {f:'Files › Settings › Info lists items per page'}),
+   ]}),
+   H('Запуск и папки'),
+   T('При запуске открывать', Object.assign(R(['список файлов','историю','избранное','ярлыки папок','последнюю книгу'],4), {fm:1, k:'start_with', f:'Files › Start with'})),
+   T('Главный экран Simple UI', {k:'simpleui', f:'Tools › Simple UI (сторонний плагин без места в меню)', keep}),
+   T('Домашняя папка', {fm:1, f:'Files › Settings › Home folder settings', keep}),
+   T('Ярлыки книг', {k:'book_shortcuts', f:'Tools › More tools › Book shortcuts', keep}),
+   T('Настройки истории', {fm:1, f:'Files › Settings › History settings', keep}),
+   T('Архив', {k:'move_to_archive', f:'Tools › Move to archive', keep}),
+   H('Данные книг'),
+   T('Где хранить метаданные', {k:'document_metadata_location', f:'General › Document › Book metadata location', keep}),
+   T('Перенести метаданные', {act:1, fm:1, k:'document_metadata_location_move', f:'General › Document › Move book metadata'}),
+   T('Сохранять метаданные', Object.assign(R(['при закрытии и сне','каждые 5 мин','каждые 15 мин','каждые 30 мин','каждый час'],0), {k:'document_auto_save', f:'General › Document › Save book metadata'})),
+   T('Архив метаданных', {k:'document_metadata_arc', f:'General › Document › Book metadata archive', keep}),
+   T('Умолчания для папок', {k:'doc_setting_tweak', f:'Tools › More tools › Tweak document settings', hint:'Настройки книг по папкам'}),
+   T('Ассоциации файлов', {k:'file_ext_assoc', f:'General › Device › Associate file extensions', dev:'PocketBook', keep}),
+ ]}),
+ T('Чтение', {ico:'open', hint:'Обновление страниц, конец книги, статистика, синхронизация', sub:[
+   T('Полное обновление страницы', {k:'screen_eink_opt › refresh', f:'General › Screen › E-ink settings › Full refresh rate', value:'каждые 6 стр.', hint:'Как Page refresh в Kindle', keep}),
+   T('В конце книги', {value:'спросить', k:'document_end_action', f:'General › Document › End of document action', sub:[
+      T('Всегда отмечать прочитанной', {check:false}),
+      T('Действие', R(['спросить','ничего','статус книги','удалить файл','следующий файл','в начало','к списку файлов','отметить прочитанной','статус и к списку файлов'],0)),
+   ]}),
+   T('Запоминать начальную страницу в истории переходов', {check:false, k:'opening_page_location_stack', f:'General › Navigation › Add opening page to location history'}),
+   T('Положение окна Skim', Object.assign(R(['сверху','по центру','снизу'],2), {k:'skim_dialog_position', f:'General › Navigation › Skim dialog position'})),
+   H('Прогресс и заметки'),
+   T('Статистика чтения', {k:'statistics', f:'Tools › Reading statistics', keep}),
+   T('Таймер чтения', {k:'read_timer', f:'Tools › Read timer', keep}),
+   T('Синхронизация прогресса', {k:'progress_sync', f:'Tools › Progress sync', ro:1, keep}),
+   T('Экспорт выделений и заметок', {k:'exporter', f:'Tools › Export highlights and notes', keep}),
+ ]}),
+ T('Приложения и плагины', {ico:'apps', hint:'Инструменты, сервисы, управление плагинами', sub:[
+   T('Облачное хранилище', {act:1, k:'cloudstorage, cloud_storage', f:'Tools › Cloud storage (на Kindle ещё core-пункт cloud_storage)'}),
+   T('Wallabag', {k:'wallabag', f:'Tools › Wallabag', keep}),
+   T('Новости RSS/Atom', {k:'news_downloader', f:'Tools › News downloader', keep}),
+   T('Текстовый редактор', {k:'text_editor', f:'Tools › Text editor', keep}),
+   T('Профили', {k:'profiles', f:'Tools › Profiles', hint:'Наборы действий, которые можно запускать разом', keep}),
+   T('QR из буфера обмена', {act:1, k:'qrclipboard', f:'Tools › QR from clipboard'}),
+   T('Терминал', {k:'terminal', f:'Tools › More tools › Terminal emulator', keep}),
+   T('Kindle Drawer', {k:'kindle_drawer', f:'Tools › More tools › Kindle Drawer', hint:'Шторки, меню и Quick actions panel', keep}),
+   H('Другие плагины'),
+   T('Hello World', {act:1, k:'hello_world', f:'Tools › More tools › Hello World (пример плагина)'}),
+   H('Управление'),
+   T('Управление плагинами', {k:'plugin_management', f:'Tools › More tools › Plugin management', hint:'Включение и выключение, нужен перезапуск', keep}),
+   T('Управление патчами', {k:'patch_management', f:'Tools › More tools › Patch management', keep}),
+   T('Отключить сторонние плагины и патчи', {check:false, k:'plugins_disable_external', f:'KOReader › Help › Disable external plugins and user-patches'}),
+ ]}),
+ T('Устройство', {ico:'device', hint:'Дата и время, накопитель, обновления, перезапуск', sub:[
+   T('Дата и время', {k:'time', f:'General › Device › Time and date', sub:[
+      T('12-часовой формат', {check:false}), T('Формат длительности', {value:'классический'}), T('Установить время'), T('Установить дату'),
+      T('Синхронизировать время', {act:1, k:'synchronize_time', f:'Tools › More tools › Synchronize time'}),
+   ]}),
+   T('Единицы измерения', {value:'метрические', k:'units', f:'General › Device › Dimension units', keep}),
+   T('Уведомления', {k:'screen_notification', f:'General › Screen › Notifications', hint:'Какие всплывающие сообщения показывать', keep}),
+   T('Папка снимков экрана', {k:'screenshot', f:'General › Device › Screenshot folder'}),
+   T('USB-накопитель', {dev:'Kobo, Cervantes', f:'KOReader › Start USB storage + General › Device › USB mass storage', sub:[T('Подключить как накопитель',{act:1, k:'mass_storage_actions'}), T('Настройки',{k:'mass_storage_settings', keep})]}),
+   T('Обновление KOReader', {k:'ota_update', f:'KOReader › Update', keep}),
+   H('Перезапуск'),
+   T('Перезапустить KOReader', {act:1, k:'restart_koreader', f:'KOReader › Exit › Restart KOReader'}),
+   T('Сон', {act:1, k:'sleep', f:'KOReader › Exit › Sleep'}),
+   T('Перезагрузить устройство', {act:1, k:'reboot', f:'KOReader › Exit › Reboot the device'}),
+   T('Выключить', {act:1, k:'poweroff', f:'KOReader › Exit › Power off'}),
+   T('Запустить BQ Reader', {act:1, k:'start_bq', f:'KOReader › Exit › Start BQ reader app', dev:'Cervantes'}),
+   T('Выйти из KOReader', {act:1, k:'exit', f:'KOReader › Exit › Exit'}),
+   H('Для опытных'),
+   T('Расширенные настройки', {act:1, fm:1, k:'advanced_settings', f:'Tools › More tools › Advanced settings'}),
+   T('Для разработчиков', {fm:1, k:'developer_options', f:'Tools › More tools › Developer options', keep}),
+   T('HTTP-инспектор', {k:'httpremote', f:'Tools › More tools › KOReader HTTP inspector', keep}),
+ ]}),
+ T('Справка', {ico:'help', hint:'Руководство, поиск по меню, версия', sub:[
+   T('Краткое руководство', {act:1, k:'quickstart_guide', f:'KOReader › Help › Quickstart guide'}),
+   T('Поиск по меню', {act:1, k:'search_menu', f:'KOReader › Help › Menu search'}),
+   T('Сообщить об ошибке', {act:1, k:'report_bug', f:'KOReader › Help › Report a bug'}),
+   T('Статистика системы', {act:1, k:'system_statistics', f:'KOReader › Help › System statistics'}),
+   T('Версия', {act:1, value:'2025.10', k:'version', f:'KOReader › Help › Version'}),
+   T('О программе', {act:1, k:'about', f:'KOReader › Help › About'}),
+ ]}),
+];
+
+// Book actions: ⋮ in Quick actions panel; fallback in the settings ⋮.
+const BOOK_ACTIONS = [
+  T('Оглавление', {act:1, k:'table_of_contents', f:'Navigation › Table of contents'}),
+  T('Закладки', {act:1, k:'bookmarks', f:'Navigation › Bookmarks'}),
+  T('Закладка на этой странице', {act:1, k:'toggle_bookmark', f:'Navigation › Bookmark current page', dev:'без сенсора'}),
+  T('Режим просмотра закладок', {check:false, k:'bookmark_browsing_mode', f:'Navigation › Bookmark browsing mode', dev:'PDF, DjVu'}),
+  T('Book map', {act:1, k:'book_map', f:'Navigation › Book map'}),
+  T('Page browser', {act:1, k:'page_browser', f:'Navigation › Page browser'}),
+  T('Перейти на страницу', {act:1, k:'go_to', f:'Navigation › Go to page'}),
+  T('Skim', {act:1, k:'skim_to', f:'Navigation › Skim document'}),
+  T('Назад к предыдущему месту', {act:1, k:'go_to_previous_location', f:'Navigation › Go back to previous location'}),
+  T('Вперёд к следующему месту', {act:1, k:'go_to_next_location', f:'Navigation › Go forward to next location'}),
+  H('Поиск'),
+  T('Поиск по книге', {act:1, k:'fulltext_search', f:'Search › Fulltext search'}),
+  T('Последние результаты поиска', {act:1, k:'fulltext_search_findall_results', f:'Search › Last fulltext search results'}),
+  T('Поиск по закладкам', {act:1, k:'bookmark_search', f:'Search › Bookmark search'}),
+  T('Перевести страницу', {act:1, k:'translate_current_page', f:'Search › Translate current page'}),
+  H('Книга'),
+  T('Статус книги', {act:1, k:'book_status', f:'KOReader › Book status'}),
+  T('Не показывать обложку на экране сна', {check:false, f:'General › Screen › Sleep screen › Do not show this book cover (настройка книги)'}),
+  T('Отправить прогресс сейчас', {act:1, k:'progress_sync', f:'Tools › Progress sync › Push progress from this device now'}),
+  T('Получить прогресс сейчас', {act:1, k:'progress_sync', f:'Tools › Progress sync › Pull progress from other devices now'}),
+  T('Информация о книге', {act:1, k:'book_info', f:'KOReader › Book information'}),
+  T('Начать выделение текста', {act:1, k:'start_content_selection', f:'Typesetting › Start text selection', dev:'без сенсора'}),
+];
+
+// Bottom drawer. c: an existing ReaderConfig option (shown with its control); m: moved menu item.
+const C = (t, ctl, x={}) => Object.assign({t, c:ctl}, x);
+const M = (t, x={}) => Object.assign({t, m:1}, x);
+const BD = [
+ {tab:'Шрифт', rows:[
+   M('Шрифт', {value:'Literata', k:'change_font', f:'Typesetting › Font', hint:'Список шрифтов; удержание: по умолчанию'}),
+   C('Размер', 'slider:45'), C('Насыщенность', 'slider:30'), C('Контраст', 'slider:50'), C('Точная настройка', 'value:22'),
+   C('Межсловный интервал', 'value:обычный'), C('Расширение пробелов', 'value:нет'), C('Хинтинг', 'value:авто'), C('Кернинг', 'value:хороший'),
+   C('Встроенные шрифты', 'switch:1', {moved:'из вкладки «Ещё»'}),
+   {sec:'Шрифты и типографика'},
+   M('Шрифты для font-family', {k:'change_font', f:'Typesetting › Font › Font-family fonts'}),
+   M('Типографика', {value:'русский', k:'typography', f:'Typesetting › Typography rules', hint:'Язык, переносы, висячая пунктуация'}),
+   M('Настройки шрифтов', {k:'change_font', f:'Typesetting › Font › Font settings', hint:'Запасные шрифты, моноширинный масштаб'}),
+ ]},
+ {tab:'Макет', rows:[
+   C('Поворот', 'value:книжная'), C('Две колонки', 'switch:0'), C('Поля слева и справа', 'slider:40'), C('Верхнее поле', 'slider:30'), C('Нижнее поле', 'slider:30'), C('Синхронизировать верх и низ', 'switch:1'),
+   {sec:'Стили книги'},
+   M('Стиль', {value:'книжный', k:'set_render_style', f:'Typesetting › Style'}),
+   C('Встроенные стили', 'switch:1', {moved:'из вкладки «Ещё»'}),
+   M('Твики стилей', {value:'3', k:'style_tweaks', f:'Typesetting › Style tweaks', hint:'Отступы, сноски, картинки'}),
+ ]},
+ {tab:'Страница', rows:[
+   C('Режим просмотра', 'value:страницы'), C('Режим рендеринга', 'value:книга'), C('Масштаб (dpi)', 'value:96'), C('Межстрочный интервал', 'slider:50'),
+   {sec:'Строка состояния и страницы'},
+   M('Строка состояния', {k:'status_bar', f:'General › Status bar', hint:'Для всех книг: элементы, шрифт, прогресс-бар, пресеты'}),
+   C('Альт. строка состояния', 'switch:0', {moved:'из вкладки «Ещё»'}),
+   M('Перекрытие страниц', {k:'page_overlap', f:'Typesetting › Page overlap'}),
+   M('Стабильные номера страниц', {k:'page_map', f:'Navigation › Settings › Stable page numbers', dev:'EPUB'}),
+   M('Скрывать нелинейные фрагменты', {switch:0, k:'hide_nonlinear_flows', f:'Navigation › Hide non-linear fragments', dev:'EPUB'}),
+ ]},
+ {tab:'Чтение', rows:[
+   {sec:'Для всех книг'},
+   M('Листание', {k:'page_turns', f:'General › Taps and gestures › Page turns', hint:'Касания, свайпы, зоны, инверсия, анимация'}),
+   M('Прокрутка', {k:'scrolling', f:'General › Taps and gestures › Scrolling', hint:'В режиме прокрутки'}),
+   M('Ссылки и сноски', {k:'follow_links / typesetfootnotes', f:'General › Taps and gestures › Links; без сенсора Typesetting › Text selection tools › Footnotes and links'}),
+   M('Удержание на тексте', {value:'спросить', k:'long_press', f:'General › Taps and gestures › Long-press on text'}),
+   M('Выделения', {value:'подсветка', k:'highlight_options', f:'Typesetting › Highlights'}),
+   M('Инструменты выделения', {k:'selection_text', f:'Typesetting › Text selection tools', dev:'кнопки'}),
+   M('Автолистание', {switch:0, k:'autoturn', f:'Navigation › Autoturn'}),
+   M('Ускоренное чтение', {k:'speed_reading_module_perception_expander', f:'Typesetting › Speed reading module - perception expander'}),
+   M('Настройки поиска', {k:'fulltext_search_settings', f:'Search › Settings › Fulltext search settings'}),
+ ]},
+ {tab:'Ещё', rows:[
+   C('Масштаб картинок', 'switch:1'), C('Инвертировать картинки', 'switch:0'),
+   {sec:'Оглавление и закладки'},
+   M('Настройки оглавления', {k:'navi_settings', f:'Navigation › Settings без Stable page numbers и Bookmarks (ToC: ticks, entries, alt ToC, custom ToC and flows)'}),
+   M('Список закладок', {k:'bookmarks_settings', f:'Navigation › Settings › Bookmarks'}),
+   {sec:'Документ'},
+   M('Настройки документа', {k:'document_settings', f:'Typesetting › Document settings', hint:'Сбросить, сохранить как умолчание'}),
+   M('Частичный перерендеринг', {switch:1, k:'partial_rerendering', f:'General › Document › Enable partial renderings'}),
+   M('Масштаб панелей (манга)', {k:'panel_zoom_options', f:'Typesetting › Panel zoom', dev:'PDF, CBZ'}),
+   M('Режим DjVu', {k:'djvu_render_mode', f:'Typesetting › DjVu render mode', dev:'DjVu'}),
+ ]},
+];
+
+// PDF, DjVu, CBZ: ReaderConfig panels from koptoptions.lua.
+const BD_PDF = [
+ {tab:'Изображение', rows:[
+   C('Контраст', 'slider:50'), C('Порог белого', 'slider:40'), C('Удаление водяных знаков', 'switch:0'), C('Очистка фона', 'switch:0'), C('Дизеринг', 'switch:1'),
+   C('Перекомпоновка', 'switch:0'),
+   {sec:'При перекомпоновке'},
+   C('Размер шрифта', 'slider:40'), C('Межсловный интервал', 'value:обычный'), C('Качество', 'value:среднее'),
+ ]},
+ {tab:'Макет', rows:[ C('Поворот', 'value:книжная'), C('Обрезка страницы', 'value:авто'), C('Поля', 'value:малые'), C('Выравнивание наклона', 'switch:0') ]},
+ {tab:'Страница', rows:[
+   C('Режим просмотра', 'value:страницы'), C('Подгонка', 'value:по ширине'), C('Масштаб', 'value:страница'), C('Направление', 'value:слева направо'), C('Перекрытие при масштабе', 'value:нет'), C('Промежуток между страницами', 'value:8'),
+   {sec:'Строка состояния и страницы'},
+   M('Строка состояния', {k:'status_bar', f:'General › Status bar', hint:'Для всех книг: элементы, шрифт, прогресс-бар, пресеты'}),
+   M('Перекрытие страниц', {k:'page_overlap', f:'Typesetting › Page overlap'}),
+ ]},
+ {tab:'Чтение', rows:null},
+ {tab:'Ещё', rows:[
+   C('Язык документа', 'value:English'), C('Распознавание текста (OCR)', 'switch:0'), C('Направление письма', 'value:слева направо'), C('Инвертировать документ', 'switch:0'), C('Колонки', 'value:2'),
+   {sec:'Оглавление и закладки'},
+   M('Настройки оглавления', {k:'navi_settings', f:'Navigation › Settings'}),
+   M('Список закладок', {k:'bookmarks_settings', f:'Navigation › Settings › Bookmarks'}),
+   {sec:'Документ'},
+   M('Настройки документа', {k:'document_settings', f:'Typesetting › Document settings'}),
+   M('Масштаб панелей (манга)', {k:'panel_zoom_options', f:'Typesetting › Panel zoom'}),
+   M('Режим DjVu', {k:'djvu_render_mode', f:'Typesetting › DjVu render mode', dev:'DjVu'}),
+ ]},
+];
+BD_PDF[3].rows = BD[3].rows;
+
+// Plugins: [plugin, key, before, after]
+const PLUGINS = [
+ ['SSH','ssh','General › Network','Wi‑Fi и сеть'],
+ ['archiveviewer','—','нет пункта меню','без изменений'],
+ ['autodim','autodim','General › Screen','Экран и подсветка'],
+ ['autostandby','autostandby','General › Device','Питание и батарея'],
+ ['autosuspend','autosuspend, autoshutdown, autostandby','General › Device','Питание и батарея'],
+ ['autoturn','autoturn','Navigation','Шторка › Чтение'],
+ ['autowarmth','autowarmth','General › Screen','Экран и подсветка'],
+ ['batterystat','battery_statistics','Tools › More tools','Питание и батарея'],
+ ['bookshortcuts','book_shortcuts','Tools › More tools','Библиотека'],
+ ['calibre','calibre','Tools','Wi‑Fi и сеть'],
+ ['calibre','find_book_in_calibre_catalog','Search','Библиотека'],
+ ['cloudstorage','cloudstorage','Tools','Приложения и плагины'],
+ ['coverbrowser','filemanager_display_mode','Files','Библиотека'],
+ ['coverimage','coverimage','General › Screen','Экран и подсветка'],
+ ['docsettingtweak','doc_setting_tweak','Tools › More tools','Библиотека'],
+ ['exporter','exporter','Tools','Чтение'],
+ ['externalkeyboard','external_keyboard','General › Device','Язык и словари'],
+ ['gestures','gesture_manager, gesture_overview, gesture_intervals','General › Taps and gestures','Жесты и кнопки'],
+ ['hello','hello_world','Tools › More tools (через sorting_hint)','Приложения и плагины › Другие плагины'],
+ ['hotkeys','hotkeys, a_type_to_search, button_press_does_hotkeys','General › Navigation › Physical buttons (sorting_hint)','Жесты и кнопки › Физические кнопки'],
+ ['httpinspector','httpremote','Tools › More tools (sorting_hint)','Устройство › Для опытных'],
+ ['japanese','через language_support','General › Document','Язык и словари'],
+ ['keepalive','keep_alive','Tools › More tools','Питание и батарея'],
+ ['kosync','progress_sync','Tools','Чтение; push/pull также в «⋮»'],
+ ['movetoarchive','move_to_archive','Tools','Библиотека'],
+ ['newsdownloader','news_downloader','Tools','Приложения и плагины'],
+ ['opds','opds','Search','Библиотека'],
+ ['perceptionexpander','speed_reading_module_perception_expander','Typesetting','Шторка › Чтение'],
+ ['profiles','profiles','Tools','Приложения и плагины'],
+ ['qrclipboard','qrclipboard','Tools','Приложения и плагины'],
+ ['readtimer','read_timer','Tools','Чтение'],
+ ['statistics','statistics','Tools','Чтение'],
+ ['systemstat','system_statistics','KOReader › Help','Справка'],
+ ['terminal','terminal','Tools › More tools','Приложения и плагины'],
+ ['texteditor','text_editor','Tools','Приложения и плагины'],
+ ['timesync','synchronize_time','Tools › More tools','Устройство › Дата и время'],
+ ['vocabbuilder','vocabbuilder','Search','Язык и словари'],
+ ['wallabag','wallabag','Tools','Приложения и плагины'],
+ ['LocalSend (сторонний)','localsend','General › Network (sorting_hint)','Wi‑Fi и сеть'],
+ ['Simple UI (сторонний)','simpleui','Tools, в конце (sorting_hint)','Библиотека'],
+ ['Kindle Drawer','kindle_drawer','Tools › More tools (sorting_hint)','Приложения и плагины; также «⋮» в настройках'],
+ ['любой другой','свой ключ','первая вкладка с «NEW:» или место по sorting_hint','по правилам 2–5'],
+];
+
+// ------------------------------------------------------------------ device mock
+const ICONS = {
+  wifi:'<path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.3a9.5 9.5 0 0 1 13 0M8.6 15.5a5 5 0 0 1 6.8 0"/><circle cx="12" cy="19" r="1.1" fill="#111"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/>',
+  battery:'<rect x="3" y="7" width="16" height="10" rx="1.5"/><path d="M21 10.5v3"/><path d="M6 10v4M9 10v4M12 10v4"/>',
+  hand:'<path d="M9 11V4.8a1.6 1.6 0 0 1 3.2 0V11M12.2 10V9a1.6 1.6 0 0 1 3.2 0v2M15.4 10.5a1.6 1.6 0 0 1 3.2 0V15a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-2.7L4 15a1.6 1.6 0 0 1 2.6-1.9L9 15.5"/>',
+  globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.5 3.8 5.5 3.8 9s-1.2 6.5-3.8 9c-2.6-2.5-3.8-5.5-3.8-9S9.4 5.5 12 3z"/>',
+  books:'<path d="M4 4.5h4v15H4zM9.5 4.5h4v15h-4z"/><path d="M15.2 5.6l3.8-1 3.6 13.7-3.8 1z"/>',
+  open:'<path d="M12 6.5C9.8 5 7 4.5 3 4.8v13.5c4-.3 6.8.2 9 1.7 2.2-1.5 5-2 9-1.7V4.8c-4-.3-6.8.2-9 1.7zM12 6.5V20"/>',
+  apps:'<rect x="3.5" y="3.5" width="7" height="7" rx="1.2"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.2"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.2"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.2"/>',
+  device:'<rect x="5.5" y="2.5" width="13" height="19" rx="2"/><path d="M10 18.5h4"/>',
+  help:'<circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.6 2.6 0 0 1 5 .9c0 1.7-2.5 2.2-2.5 4"/><circle cx="12" cy="17.2" r=".9" fill="#111"/>',
+};
+const icon = k => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
+const CHEV = '<svg width="9" height="15" viewBox="0 0 9 15"><path d="M1.5 1.5 7.5 7.5 1.5 13.5" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round"/></svg>';
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+
+const S = {ctx:'fm', doc:'epub', stack:[], pop:false, bd:null, bdTab:0, bdSub:null};
+const curBD = () => S.doc === 'pdf' ? BD_PDF : BD;
+const scr = document.getElementById('scr');
+const fromBox = document.getElementById('from');
+const visible = it => !(S.ctx === 'fm' && it.ro) && !(S.ctx === 'rd' && it.fm);
+function reset(){ S.stack = [{title:'Настройки', items:ROOT, root:true}]; S.pop = false; }
+const cur = () => S.stack[S.stack.length - 1];
+const val = it => it.radio ? it.radio[it.sel] : it.value;
+const tags = it => (it.ro ? '<span class="tag bk">книга</span>' : '') + (it.dev ? `<span class="tag">${esc(it.dev)}</span>` : '');
+
+function statusBar(){
+  return `<div class="status"><span>16:42</span><span class="handle"><svg width="44" height="10" viewBox="0 0 44 10"><path d="M3 2.5 22 7.5 41 2.5" fill="none" stroke="#111" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+  <span class="r">67%<svg width="22" height="11" viewBox="0 0 22 11"><rect x=".75" y=".75" width="18.5" height="9.5" rx="1.5" fill="none" stroke="#111" stroke-width="1.5"/><rect x="2.6" y="2.6" width="10.5" height="5.8" fill="#111"/><rect x="20" y="3.5" width="1.6" height="4" fill="#111"/></svg></span></div>`;
+}
+function rowHtml(it, i, items){
+  if (it.head) return `<div class="head ${i === 0 ? 'first' : ''}">${esc(it.head)}</div>`;
+  const next = items[i + 1];
+  const nodiv = next && next.head ? 'nodiv' : '';
+  if (it.radioParent){
+    const on = it.radioParent.sel === it.idx;
+    return `<div class="row ${nodiv}" data-a="radio" data-i="${i}"><span class="radio ${on ? 'on' : ''}"></span><div class="txt"><div class="lbl" style="font-weight:${on ? 700 : 500}">${esc(it.t)}</div></div></div>`;
+  }
+  let right = '';
+  if (it.check !== undefined) right = `<span class="sw ${it.check ? 'on' : ''}"></span>`;
+  else {
+    const v = val(it);
+    if (v) right += `<span class="val">${esc(v[0].toUpperCase() + v.slice(1))}</span>`;
+    if (it.sub || it.radio || it.keep) right += `<span class="chev">${CHEV}</span>`;
+  }
+  const ico = it.ico ? `<span class="ico">${icon(it.ico)}</span>` : '';
+  return `<div class="row ${it.act ? 'act' : ''} ${nodiv}" data-a="item" data-i="${i}">${ico}<div class="txt"><div class="lbl">${esc(it.t)}${tags(it)}</div>${it.hint ? `<div class="sub">${esc(it.hint)}</div>` : ''}</div>${right}</div>`;
+}
+function render(){
+  const e = cur(), depth = S.stack.length - 1;
+  const shown = e.items.filter(visible);
+  // A group caption with nothing visible under it is dropped.
+  const items = shown.filter((it, i) => !it.head || (shown[i + 1] && !shown[i + 1].head));
+  e.view = items;
+  let h = statusBar();
+  h += `<div class="titlebar">${depth ? `<div class="ib back" data-a="back"><svg width="22" height="18" viewBox="0 0 22 18"><path d="M20 9H3M9.5 2 2.5 9l7 7" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>` : ''}
+    <div class="ttl">${esc(e.title)}</div>
+    <div class="ib" data-a="more"><svg width="4" height="18" viewBox="0 0 4 18"><circle cx="2" cy="2" r="2"/><circle cx="2" cy="9" r="2"/><circle cx="2" cy="16" r="2"/></svg></div>
+    <div class="ib" data-a="close"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M2 2l14 14M16 2 2 16" stroke="#111" stroke-width="2" stroke-linecap="round"/></svg></div></div>`;
+  h += `<div class="vp" id="vp">${items.map((it, i) => rowHtml(it, i, items)).join('')}</div>`;
+  if (S.pop) h += `<div class="pop">${S.ctx === 'rd' ? '<div data-a="bookacts">Действия с книгой</div>' : ''}<div data-a="classic">Классическое меню KOReader</div><div data-a="drawer">Настройки Kindle Drawer</div></div>`;
+  h += `<div class="toast" id="toast"></div>`;
+  scr.innerHTML = h;
+  if (e.scroll) document.getElementById('vp').scrollTop = e.scroll;
+}
+let toastTimer;
+function toast(msg){
+  const t = document.getElementById('toast'); if (!t) return;
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+function push(title, items){
+  const vp = document.getElementById('vp'); if (vp) cur().scroll = vp.scrollTop;
+  S.stack.push({title, items});
+}
+function showFrom(it){
+  if (!it || it.head) return;
+  if (it.f) fromBox.innerHTML = `<div class="mut">Было в KOReader:</div>${esc(it.f)}${it.k ? `<br><code>${esc(it.k)}</code>` : ''}${it.keep ? '<div class="mut" style="margin-top:4px">Подменю переносится целиком, как в KOReader.</div>' : ''}`;
+  else if (it.sub && it.ico) fromBox.innerHTML = `<div class="mut">Новый раздел.</div>${esc(it.hint || '')}`;
+}
+scr.addEventListener('mouseover', ev => {
+  const el = ev.target.closest('[data-i]'); if (!el) return;
+  if (S.bd) { const r = S.bdView && S.bdView[+el.dataset.i]; if (r) showFrom(r); return; }
+  showFrom(cur().view[+el.dataset.i]);
+});
+scr.addEventListener('click', ev => {
+  const el = ev.target.closest('[data-a]');
+  const a = el && el.dataset.a, i = el ? +el.dataset.i : -1;
+  if (S.bd) return bdClick(a, i);
+  if (S.pop && a !== 'more'){
+    S.pop = false;
+    if (a === 'classic'){ render(); toast('Открывает штатное меню KOReader с вкладками'); return; }
+    if (a === 'drawer'){ reset(); const apps = ROOT.find(x => x.ico === 'apps'); push(apps.t, apps.sub); render(); toast('Раздел «Приложения и плагины» › Kindle Drawer'); return; }
+    if (a === 'bookacts'){ push('Действия с книгой', BOOK_ACTIONS); render(); return; }
+    render(); return;
+  }
+  if (!a) return;
+  const e = cur();
+  switch (a){
+    case 'more': S.pop = !S.pop; render(); break;
+    case 'close': toast('Закрывает настройки'); break;
+    case 'back': S.stack.pop(); render(); break;
+    case 'radio': { const it = e.view[i]; it.radioParent.sel = it.idx; render(); break; }
+    case 'item': {
+      const it = e.view[i];
+      if (it.check !== undefined){ it.check = !it.check; render(); }
+      else if (it.sub) { push(it.t, it.sub); render(); }
+      else if (it.radio) { push(it.t, it.radio.map((o, idx) => ({t:o[0].toUpperCase() + o.slice(1), radioParent:it, idx}))); render(); }
+      else if (it.keep) toast('Подменю KOReader без изменений');
+      else toast(it.act ? 'Выполняет действие KOReader' : 'Открывает окно KOReader');
+      break;
+    }
+  }
+});
+
+// ------------------------------------------------------------------ bottom drawer mock
+function bdControl(r){
+  if (r.c){
+    const [kind, v] = r.c.split(':');
+    if (kind === 'slider') return `<div class="sl" style="--p:${v}%"></div>`;
+    if (kind === 'switch') return `<span class="sw ${v === '1' ? 'on' : ''}" style="transform:scale(.8);margin-left:auto"></span>`;
+    return `<span>${esc(v)}</span><span class="ch">›</span>`;
+  }
+  if (r.switch !== undefined) return `<span class="sw ${r.switch ? 'on' : ''}" style="transform:scale(.8);margin-left:auto"></span>`;
+  return `${r.value ? `<span>${esc(r.value)}</span>` : ''}<span class="ch">›</span>`;
+}
+function renderBd(){
+  const book = `<div class="book">It was a bright cold day in April, and the clocks were striking thirteen. Winston Smith, his chin nuzzled into his breast in an effort to escape the vile wind, slipped quickly through the glass doors of Victory Mansions, though not quickly enough to prevent a swirl of gritty dust from entering along with him.</div>`;
+  let h = statusBar() + book + `<div class="bd"><div class="tabs">`;
+  let rows;
+  if (S.bdSub){
+    h += `<div class="bk" data-a="bdback">‹ Назад</div><div class="ttl2">${esc(S.bdSub.t)}</div>`;
+    rows = [{note:1}];
+  } else {
+    curBD().forEach((tb, i) => { h += `<div class="${i === S.bdTab ? 'on' : ''}" data-a="tab" data-i="${i}">${tb.tab}</div>`; });
+    rows = curBD()[S.bdTab].rows;
+  }
+  S.bdView = rows;
+  h += `</div><div class="list">`;
+  rows.forEach((r, i) => {
+    if (r.note){ h += `<div class="r" style="cursor:default;color:#555;line-height:1.4;padding:14px 18px">Здесь пункты подменю KOReader: «${esc(S.bdSub.t)}». Строки со стрелкой открывают следующий уровень внутри шторки, флажки показаны переключателями, выбор одного значения — кружками, как в верхнем меню.</div>`; return; }
+    if (r.sec){ h += `<div class="r sec">${esc(r.sec)}</div>`; return; }
+    const mv = r.m ? '<span class="tag mv">из меню</span>' : (r.moved ? `<span class="tag">${esc(r.moved)}</span>` : '');
+    const dv = r.dev ? `<span class="tag">${esc(r.dev)}</span>` : '';
+    h += `<div class="r ${r.m ? 'm' : ''}" data-a="bdrow" data-i="${i}"><div class="n">${esc(r.t)}${mv}${dv}${r.hint ? `<div style="font-weight:400;color:#555;font-size:11.5px">${esc(r.hint)}</div>` : ''}</div><div class="c">${bdControl(r)}</div></div>`;
+  });
+  h += `</div><div class="foot">${S.bdSub ? '' : 'Параметры KOReader'}</div></div><div class="toast" id="toast"></div>`;
+  scr.innerHTML = h;
+}
+function bdClick(a, i){
+  if (a === 'tab'){ S.bdTab = i; renderBd(); return; }
+  if (a === 'bdback'){ S.bdSub = null; renderBd(); return; }
+  if (a === 'bdrow'){
+    const r = S.bdView[i];
+    if (r.m && r.switch === undefined){ S.bdSub = r; renderBd(); return; }
+    toast(r.c ? 'Параметр нижней панели KOReader, как сейчас' : 'Переключает значение');
+    return;
+  }
+  if (!a){ S.bd = null; document.getElementById('bdbtn').textContent = 'Открыть нижнюю шторку'; render(); }
+}
+document.getElementById('bdbtn').addEventListener('click', () => {
+  if (S.bd){ S.bd = null; S.bdSub = null; document.getElementById('bdbtn').textContent = 'Открыть нижнюю шторку'; render(); return; }
+  S.bd = true; S.bdSub = null; document.getElementById('bdbtn').textContent = 'Закрыть нижнюю шторку'; renderBd();
+});
+const ctxBox = document.getElementById('ctx');
+ctxBox.addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  ctxBox.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  S.ctx = b.dataset.v; S.bd = null; S.bdSub = null;
+  const bb = document.getElementById('bdbtn'); bb.disabled = S.ctx !== 'rd'; bb.textContent = 'Открыть нижнюю шторку';
+  document.getElementById('doc').style.display = S.ctx === 'rd' ? 'flex' : 'none';
+  reset(); render();
+});
+
+// ------------------------------------------------------------------ mapping table
+const docBox = document.getElementById('doc');
+docBox.addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  docBox.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  S.doc = b.dataset.v; S.bdSub = null; S.bdTab = 0;
+  if (S.bd) renderBd();
+});
+
+const MAP = [];
+function walk(items, path, dest){
+  for (const it of items){
+    if (it.head) continue;
+    const here = path.concat(it.t);
+    if (it.f) MAP.push({old:it.f, k:it.k, now:here.join(' › '), dest, ro:it.ro, dev:it.dev, keep:it.keep});
+    if (it.sub) walk(it.sub, here, dest);
+  }
+}
+for (const sec of ROOT) walk(sec.sub, ['Настройки', sec.t], sec.t);
+walk(BOOK_ACTIONS, ['⋮ Действия с книгой'], 'Действия с книгой');
+for (const tb of BD) for (const r of tb.rows) if (r.m) MAP.push({old:r.f, k:r.k, now:`Нижняя шторка › ${tb.tab} › ${r.t}`, dest:'Нижняя шторка', ro:1, dev:r.dev});
+document.getElementById('cnt').textContent = `${MAP.length} строк: все пункты верхнего уровня вкладок KOReader и пункты из подменю, которые переезжают отдельно. Подменю, которые переносятся целиком, занимают одну строку.`;
+const DESTS = ['Все', ...new Set(MAP.map(m => m.dest))];
+let dsel = 'Все';
+const chips = document.getElementById('chips');
+function drawChips(){ chips.innerHTML = DESTS.map(d => `<button class="${d === dsel ? 'on' : ''}" data-d="${esc(d)}">${esc(d)}</button>`).join(''); }
+chips.addEventListener('click', ev => { const b = ev.target.closest('button'); if (!b) return; dsel = b.dataset.d; drawChips(); drawTable(); });
+const q = document.getElementById('q');
+q.addEventListener('input', drawTable);
+function drawTable(){
+  const s = q.value.trim().toLowerCase();
+  const rows = MAP.filter(m => (dsel === 'Все' || m.dest === dsel) && (!s || (m.old + ' ' + m.now + ' ' + (m.k || '')).toLowerCase().includes(s)));
+  document.getElementById('tb').innerHTML = rows.map(m => `<tr><td class="old">${esc(m.old)}${m.k ? `<br><span class="k">${esc(m.k)}</span>` : ''}</td><td>${esc(m.now)}${m.dest === 'Нижняя шторка' ? '<span class="pill dr">шторка</span>' : ''}${m.ro && m.dest !== 'Нижняя шторка' ? '<span class="pill">книга</span>' : ''}${m.dev ? `<span class="pill">${esc(m.dev)}</span>` : ''}</td></tr>`).join('');
+}
+drawChips(); drawTable();
+document.getElementById('pl').innerHTML = PLUGINS.map(p => `<tr><td>${esc(p[0])}</td><td><span class="k">${esc(p[1])}</span></td><td class="mut">${esc(p[2])}</td><td>${esc(p[3])}</td></tr>`).join('');
+
+reset(); render();
+console.log('rows in map', MAP.length);
+</script>
+</body>
+</html>

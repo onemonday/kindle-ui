@@ -12,6 +12,13 @@ local action_y = 84
 local action_icon_size = 30
 local action_divider_y = 119
 local content_divider_y = 179
+-- Action row, left to right: center x and icon. Each button takes the span halfway to
+-- its neighbours; the first starts 34 units left of its center, the last runs to the edge.
+local actions = {
+    { id = "layout", x = 380 }, { id = "toc", x = 448, icon = "book-toc" },
+    { id = "bookmark", x = 516, icon = "book-bookmark" }, { id = "pages", x = 584, icon = "book-pages" },
+    { id = "more", x = 652, icon = "book-more" }, { id = "close", x = 721, icon = "book-close" },
+}
 function M:init()
     self.dimen=Device.screen:getSize()
     self.scale=self.dimen.w/750
@@ -25,6 +32,14 @@ function M:init()
 end
 function M:showLayoutPanel()
     self.owner:openQuickActionsLayout()
+end
+local action_events = { toc = "ShowToc", bookmark = "ShowBookmark", pages = "ShowPageBrowser" }
+function M:runAction(id)
+    if id == "layout" then self:showLayoutPanel()
+    elseif id == "more" then self.owner:openBookActions() -- book actions in the settings menu
+    elseif id == "close" then return self:closeDialog()
+    else return self:bookAction(action_events[id]) end
+    return true
 end
 function M:closeDialog()
     UIManager:close(self)
@@ -91,11 +106,10 @@ function M:paintTo(bb)
     Drawer.paintBattery(self,bb,true)
     Drawer.icon(self,bb,"book-back",34,action_y,action_icon_size)
     self:text(bb,tr("Home"),57,70,22,false,false,210)
-    self:text(bb,"Aa",425,71,22,true,false,70)
-    Drawer.icon(self,bb,"book-toc",500,action_y,action_icon_size)
-    Drawer.icon(self,bb,"book-bookmark",575,action_y,action_icon_size)
-    Drawer.icon(self,bb,"book-pages",650,action_y,action_icon_size)
-    Drawer.icon(self,bb,"book-close",721,action_y,action_icon_size)
+    for _,action in ipairs(actions) do
+        if action.icon then Drawer.icon(self,bb,action.icon,action.x,action_y,action_icon_size)
+        else self:text(bb,"Aa",action.x,71,22,true,false,70) end
+    end
     self:rect(bb,0,action_divider_y,750,2,BB.COLOR_LIGHT_GRAY)
     local props=self.ui.doc_props or {}
     local title=props.display_title or props.title or tr("Book")
@@ -116,11 +130,13 @@ function M:bookTap(pos)
         if x>=330 and x<=420 then self.owner:onKindleDrawer() end
     elseif y<action_divider_y then
         if x<270 then return self:bookAction("Home")
-        elseif x>=387 and x<463 then self:showLayoutPanel()
-        elseif x>=463 and x<538 then return self:bookAction("ShowToc")
-        elseif x>=538 and x<613 then return self:bookAction("ShowBookmark")
-        elseif x>=613 and x<689 then return self:bookAction("ShowPageBrowser")
-        elseif x>=689 then return self:closeDialog() end
+        else
+            for i,action in ipairs(actions) do
+                local left=i==1 and action.x-34 or (actions[i-1].x+action.x)/2
+                local right=actions[i+1] and (action.x+actions[i+1].x)/2 or math.huge
+                if x>=left and x<right then return self:runAction(action.id) end
+            end
+        end
     elseif y>=self.dimen.h/self.scale-142 then return self:bookAction("ShowSkimtoDialog")
     elseif y>=182 then return self:closeDialog() end
     return true
