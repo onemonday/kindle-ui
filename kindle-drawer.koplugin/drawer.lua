@@ -69,6 +69,7 @@ function Drawer:text(bb, value, x, y, size, centered, bold, max_width, verticall
     widget:paintTo(bb, math.floor(self.offset + x * self.scale - (centered and width / 2 or 0)),
         math.floor(y * self.scale - (vertically_centered and height / 2 or 0)))
     widget:free()
+    return width / self.scale, height / self.scale
 end
 
 function Drawer:icon(bb, id, x, y, size, active)

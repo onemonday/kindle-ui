@@ -221,7 +221,9 @@ function Plugin:onQuickActionsPanel()
     if not self.quick_actions_panel then
         local Panel=require("quickactionspanel")
         self.quick_actions_panel=Panel:new{owner=self,ui=self.ui,document=self.ui.document}
-        UIManager:show(self.quick_actions_panel,self.quick_actions_panel.full_refresh and "full" or "ui",Device.screen:getSize())
+        -- Opening overlays the current page, so a normal UI refresh is enough.
+        -- Keep the optional full refresh for closing, where it clears E Ink ghosting.
+        UIManager:show(self.quick_actions_panel,"ui",Device.screen:getSize())
     end
     return true
 end
