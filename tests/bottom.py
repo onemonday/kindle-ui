@@ -149,6 +149,17 @@ p:onCloseWidget(); screen.w=1072; screen.h=1448
 print("PASS: review regressions (fast slider swipe, held preset, non-touch fallback), full refresh, geometry")
 ''')
 lua.execute(r'''
+for _,full in ipairs({false,true}) do
+ G_reader_settings.data={kindle_drawer={full_refresh=full}}
+ local p=Plugin:new{ui=makeReader(cre)};p:onQuickActionsPanel()
+ assert(manager.last_show.refresh=="ui","quick actions never full-refreshes on open")
+ p.quick_actions_panel:onClose()
+ assert(manager.last_dirty.refresh==(full and "full" or "partial"),"quick actions honors full refresh on close")
+ p:onCloseWidget()
+end
+print("PASS: quick actions uses UI refresh on open and the configured refresh on close")
+''')
+lua.execute(r'''
 G_reader_settings.data={}; local p=Plugin:new{ui=makeReader(cre)}; p:onKindleBottomDrawer(); local d=p.bottom_drawer
 local switch=d:findOptionByName("embedded_css")
 d:showChoices(switch)

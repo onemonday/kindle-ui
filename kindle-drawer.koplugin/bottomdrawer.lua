@@ -104,8 +104,9 @@ function Bottom:update()
 end
 
 function Bottom:refresh() UIManager:setDirty(self, "ui", self.dialog_frame.dimen) end
-function Bottom:text(bb, value, x, y, size, centered, bold, width)
-    Drawer.text(self, bb, tostring(value), x, y + self.top / self.scale, size, centered, bold, width)
+function Bottom:text(bb, value, x, y, size, centered, bold, width, vertically_centered)
+    return Drawer.text(self, bb, tostring(value), x, y + self.top / self.scale,
+        size, centered, bold, width, vertically_centered)
 end
 function Bottom:rect(bb, x, y, w, h, color)
     bb:paintRect(math.floor(x*self.scale), math.floor(self.top+y*self.scale),
@@ -169,9 +170,9 @@ function Bottom:paintTo(bb)
     else
         if self.return_callback then self:text(bb,"‹ "..tr("Back"),650,20,20,false,false,90) end
         for i,tab in ipairs(self.tabs) do
-            local x = 26+(i-1)*132
-            self:text(bb,tab.title,x,20,22,false,i==self.panel_index,124)
-            if i==self.panel_index then self:rect(bb,x-4,57,116,3) end
+            local center = 84+(i-1)*132
+            local width = self:text(bb,tab.title,center,20,22,true,i==self.panel_index,124)
+            if i==self.panel_index then self:rect(bb,center-width/2,57,width,3) end
         end
     end
     for _,row in ipairs(self.page_rows) do
@@ -185,16 +186,16 @@ function Bottom:paintTo(bb)
             self:text(bb,o.label,90,y+20,21,false,selected,620)
         else
             local enabled=self:enabled(o)
-            self:text(bb,self:title(o),30,y+(self:isSlider(o) and 60 or 22),21,false,true,260)
+            self:text(bb,self:title(o),30,y+row.height/2,21,false,true,260,true)
             local position=self:position(o)
             local values=o.values or o.args or {}
             local icons=o.item_icons_func and o.item_icons_func(self.configurable,self.document) or o.item_icons
             if self:isSlider(o) then
                 local fraction = position and (position-1)/math.max(1,#values-1) or 0
                 local x=350+fraction*290
-                self:text(bb,display(self:current(o)),x,y+18,17,true,false,180)
-                self:text(bb,"−",310,y+56,30,true)
-                self:text(bb,"+",677,y+56,30,true)
+                self:text(bb,display(self:current(o)),x,y+28,17,true,false,180)
+                self:text(bb,"−",310,y+77,30,true,false,nil,true)
+                self:text(bb,"+",677,y+77,30,true,false,nil,true)
                 self:rect(bb,350,y+77,290,1)
                 if fraction>0 then self:rect(bb,350,y+75,290*fraction,5) end
                 Drawer.icon(self,bb,"knob",x,y+77+self.top/self.scale,36)
