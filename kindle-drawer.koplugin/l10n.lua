@@ -38,6 +38,27 @@ local ru = {
     ["SSH server is already running."] = "SSH-сервер уже запущен.",
     ["Scanning for networks…"] = "Поиск сетей…",
     ["This device cannot list Wi-Fi networks."] = "Это устройство не показывает список сетей Wi-Fi.",
+    -- Kindle-style top menu
+    ["Kindle-style menu"] = "Меню в стиле Kindle",
+    ["Settings"] = "Настройки", ["Menu"] = "Меню",
+    ["Files"] = "Файлы", ["General"] = "Основные", ["Tools"] = "Инструменты", ["Search"] = "Поиск",
+    ["KOReader"] = "KOReader", ["Navigation"] = "Навигация", ["Typesetting"] = "Оформление",
+    ["Continue reading"] = "Продолжить чтение",
+    ["Classic KOReader menu"] = "Классическое меню KOReader",
+    ["Kindle Drawer settings"] = "Настройки Kindle Drawer",
+    ["Screen shown when KOReader starts"] = "Экран при запуске KOReader",
+    ["Folders are sorted together with books"] = "Папки сортируются вместе с книгами",
+    ["Scales the interface; Auto uses the device value"] = "Масштаб интерфейса; «Авто» — по устройству",
+    ["Wireless transfer from Calibre on your computer"] = "Передача книг из Calibre на компьютере по Wi-Fi",
+    ["Saved sets of settings you can switch between"] = "Наборы настроек для быстрого переключения",
+    ["Downloads RSS feeds as books"] = "Загружает RSS-ленты в виде книг",
+    ["Finds books by title or author in Calibre libraries"] = "Ищет книги по названию или автору в библиотеках Calibre",
+    ["Browse and download books from online libraries"] = "Каталоги онлайн-библиотек и загрузка книг",
+    ["Marks the part of the previous page after turning"] = "Отмечает строки прошлой страницы на новой",
+    ["Overrides book styles: indents, footnotes, images"] = "Меняет стили книги: отступы, сноски, изображения",
+    ["Language rules for hyphenation and line breaks"] = "Правила переносов и разрывов строк",
+    ["Replaces the KOReader top menu"] = "Заменяет верхнее меню KOReader",
+    ["Clears e-ink ghosting, a bit slower"] = "Убирает остаточные следы e-ink, но медленнее",
 }
 local M = {}
 function M.language()

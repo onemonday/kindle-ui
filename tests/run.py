@@ -2,6 +2,9 @@
 from pathlib import Path
 from lupa.lua51 import LuaRuntime
 lua = LuaRuntime(unpack_returned_tuples=True)
+# Real Unicode case mapping stands in for KOReader's ffi/utf8proc.
+lua.globals().py_upper = lambda s: s.upper()
+lua.globals().py_lower = lambda s: s.lower()
 lua.execute(r'''
 package.path = "kindle-drawer.koplugin/?.lua;" .. package.path
 local Base = {}
@@ -51,6 +54,7 @@ package.preload["ui/widget/infomessage"]=function() return Base end
 package.preload["ui/font"]=function() return {getFace=function(_,_,size) return screen:scaleBySize(size) end} end
 package.preload["ffi/blitbuffer"]=function()
  return {COLOR_BLACK="black",COLOR_WHITE="white",COLOR_LIGHT_GRAY="#ccc",TYPE_BB8A=1,
+ COLOR_GRAY_3="#333",COLOR_GRAY_5="#555",COLOR_GRAY_9="#999",COLOR_GRAY_D="#ddd",COLOR_GRAY="#aaa",COLOR_DARK_GRAY="#888",
  Color8A=function(v,a) return {value=v,alpha=a} end,
  new=function(w,h,t)
   local b={w=w,h=h,t=t,pixels={},background={value=0,alpha=0}}
@@ -63,7 +67,8 @@ end
 painted={}
 local Text=Base:extend{}
 function Text:getSize() return {w=#self.text*self.face*0.28,h=self.face} end
-function Text:paintTo(bb,x,y) painted[#painted+1]={kind="text",text=self.text,x=x,y=y,size=self.face,bold=self.bold} end
+function Text:paintTo(bb,x,y) painted[#painted+1]={kind="text",text=self.text,x=x,y=y,size=self.face,bold=self.bold,color=self.fgcolor} end
+function Text:isTruncated() return self.max_width~=nil and #self.text*self.face*0.28>self.max_width end
 function Text:free() end
 package.preload["ui/widget/textwidget"]=function() return Text end
 local Image=Base:extend{}
@@ -75,13 +80,24 @@ function bb:alphablitFrom(source,x,y,ox,oy,w,h)
  assert(ox==0 and oy==0 and h<=source.h and w==source.w)
  painted[#painted+1]={kind="shade",x=x,y=y,w=w,h=h,color=source.ink}
 end
-function device:isTouchDevice() return true end
+function device:isTouchDevice() return self.touch ~= false end
+package.preload["ffi/utf8proc"]=function() return {uppercase_dumb=function(s) return py_upper(s) end,lowercase=function(s) return py_lower(s) end} end
+clock_ms=0
+package.preload["ui/time"]=function() return {now=function() return clock_ms*1000 end,to_ms=function(t) return t/1000 end} end
+package.preload.datetime=function() return {secondsToHour=function(s,twelve) return os.date(twelve and "%I:%M %p" or "%H:%M",s) end} end
+function manager:scheduleIn(_,fn) self.scheduled=fn end
+function manager:unschedule(fn) if self.scheduled==fn then self.scheduled=nil end end
 function newUI()
  local menu={activation_menu="swipe_tap",original_calls=0}
  function menu:registerToMainMenu() end
+ function menu:setUpdateItemTable() self.tab_item_table={{icon="appbar.settings",{text="item"}}} end
  function menu:onShowMenu() self.original_calls=self.original_calls+1 end
  function menu:onTapShowMenu() self.original_calls=self.original_calls+1 end
  function menu:onSwipeShowMenu() self.original_calls=self.original_calls+1 end
+ function menu:onCloseFileManagerMenu()
+  if self.menu_container then manager:close(self.menu_container); self.menu_container=nil end
+  return true
+ end
  local ui={menu=menu,document={},kosync={},events={}}
  function ui:handleEvent(e) self.events[#self.events+1]=e.name end
  return ui
@@ -91,7 +107,11 @@ ui=newUI(); original=ui.menu.onTapShowMenu; plugin=Plugin:new{ui=ui}
 assert(ui.menu:onSwipeShowMenu({direction="south"})==true and plugin.drawer)
 assert(ui.menu.original_calls==0)
 local first=plugin.drawer; plugin:onKindleDrawer(); assert(first==plugin.drawer)
-plugin:activate("settings"); assert(not plugin.drawer and ui.menu.original_calls==1)
+plugin:activate("settings"); assert(not plugin.drawer and plugin.settings_menu and ui.menu.original_calls==0)
+plugin:onKindleDrawer(); assert(plugin.drawer and not plugin.settings_menu, "panels are mutually exclusive")
+plugin.settings.kindle_menu=false
+plugin:activate("settings"); assert(not plugin.drawer and not plugin.settings_menu and ui.menu.original_calls==1)
+plugin.settings.kindle_menu=nil
 plugin:onKindleDrawer(); local d=plugin.drawer
 assert(d.height<screen.h and #d.sliders==2)
 d:paintTo(bb)
@@ -120,7 +140,9 @@ d:onDrawer_multiswipe()
 d:onDrawer_tap(nil,{pos={x=0,y=screen.h-1}}); assert(not plugin.drawer)
 for _,id in ipairs({"wifi","night","sync","light","power","ssh"}) do plugin.settings.hidden[id]=true end
 assert(#plugin:buttons()==1 and plugin:buttons()[1].id=="settings")
-plugin.settings.enabled=false; plugin.settings.quick_actions_enabled=false; ui.menu:onTapShowMenu({}); assert(ui.menu.original_calls==2)
+plugin.settings.enabled=false; plugin.settings.quick_actions_enabled=false
+ui.menu:onTapShowMenu({}); assert(ui.menu.original_calls==1 and plugin.settings_menu); plugin:closeSettingsMenu()
+plugin.settings.kindle_menu=false; ui.menu:onTapShowMenu({}); assert(ui.menu.original_calls==2); plugin.settings.kindle_menu=nil
 plugin.settings.enabled=true; ui.menu:onSwipeShowMenu({direction="south"}); assert(plugin.drawer)
 plugin:onSuspend(); assert(not plugin.drawer)
 plugin:onCloseWidget(); assert(ui.menu.onTapShowMenu==original)
@@ -135,6 +157,7 @@ p3:onCloseWidget()
 ''')
 preview_paint = lua.globals().painted
 lua.execute(Path('tests/features.lua').read_text())
+lua.execute(Path('tests/menu.lua').read_text())
 print('PASS: Lua load, menu hooks/restore, all-settings escape, toggle visibility, capability filtering, slider bounds, dismissal, suspend, portrait/landscape fit')
 # Approximate visual artifact from actual paint calls; font metrics are doubles.
 from html import escape
