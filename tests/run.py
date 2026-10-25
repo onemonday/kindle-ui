@@ -14,6 +14,15 @@ package.preload["ui/widget/container/widgetcontainer"] = function() return Base 
 package.preload["ui/widget/container/inputcontainer"] = function() return Base end
 package.preload["ui/geometry"] = function() return Base end
 package.preload["ui/gesturerange"] = function() return Base end
+-- gettext returns the msgid, like an untranslated KOReader; logger records lines for assertions.
+package.preload["gettext"] = function() return setmetatable({pgettext=function(_,s) return s end},{__call=function(_,s) return s end}) end
+log_lines = {}
+package.preload["logger"] = function()
+ local function rec(level) return function(...) local t={level}; for _,v in ipairs({...}) do t[#t+1]=tostring(v) end; log_lines[#log_lines+1]=table.concat(t," ") end end
+ return {dbg=function() end, info=rec("info"), warn=rec("warn"), err=rec("err")}
+end
+package.preload["ffi/util"] = function() return {template=function(s,...) local a={...}; return (s:gsub("%%(%d)",function(i) return tostring(a[tonumber(i)]) end)) end} end
+package.preload["ui/menusorter"] = function() return dofile("tests/menusorter_fake.lua") end
 G_reader_settings = { data={} }
 function G_reader_settings:readSetting(k,d) if self.data[k]~=nil then return self.data[k] end; return d end
 function G_reader_settings:saveSetting(k,v) self.data[k]=v end
@@ -158,6 +167,7 @@ p3:onCloseWidget()
 preview_paint = lua.globals().painted
 lua.execute(Path('tests/features.lua').read_text())
 lua.execute(Path('tests/menu.lua').read_text())
+lua.execute(Path('tests/layout.lua').read_text())
 print('PASS: Lua load, menu hooks/restore, all-settings escape, toggle visibility, capability filtering, slider bounds, dismissal, suspend, portrait/landscape fit')
 # Approximate visual artifact from actual paint calls; font metrics are doubles.
 from html import escape
