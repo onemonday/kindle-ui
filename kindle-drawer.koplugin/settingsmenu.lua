@@ -1,13 +1,12 @@
--- Kindle-style view of KOReader's top menu. The data is the menu's own
--- tab_item_table; selection, hold and refresh rules mirror ui/widget/touchmenu.lua,
--- and this widget offers the same surface to callbacks (touchmenu_instance).
+-- Kindle-style view of KOReader's top menu. Sections come from layout.lua and hold
+-- KOReader's own items; selection, hold and refresh rules mirror ui/widget/touchmenu.lua
+-- (menuitems.lua), and this widget offers the same surface to callbacks (touchmenu_instance).
 local InputContainer = require("ui/widget/container/inputcontainer")
 local Geom = require("ui/geometry")
 local GestureRange = require("ui/gesturerange")
 local TextWidget = require("ui/widget/textwidget")
 local ImageWidget = require("ui/widget/imagewidget")
 local Blitbuffer = require("ffi/blitbuffer")
-local Utf8Proc = require("ffi/utf8proc")
 local Device = require("device")
 local UIManager = require("ui/uimanager")
 local Event = require("ui/event")
@@ -15,6 +14,7 @@ local NetworkMgr = require("ui/network/manager")
 local datetime = require("datetime")
 local time = require("ui/time")
 local Drawer = require("drawer")
+local Items = require("menuitems")
 local L10n = require("l10n")
 local tr = L10n.tr
 local Screen = Device.screen
@@ -36,7 +36,7 @@ local c_group = color("COLOR_GRAY_9", "COLOR_DARK_GRAY")
 -- drawn on a 512 x 683 screen (x0.82, the size of real Kindle Settings).
 local STATUS_H, TITLE_H = 30, 48
 local VIEW_TOP = STATUS_H + TITLE_H + 1
-local ROW, ROW2, SEP = 56, 68, 11
+local ROW, ROW2, SEP, CAPTION, CAPTION_FIRST = 56, 68, 11, 40, 34
 local PAD_L, PAD_R, PAD_R_SCROLL = 24, 32, 58
 -- Right-hand row columns, shared by paintRow and the tap hit areas.
 local CHEVRON_COL = 9 + 14 -- chevron icon + gap
@@ -46,25 +46,16 @@ local POP_W, POP_ITEM = 236, 44
 local FLING_MS, PAN_MS = 320, 80
 local DESIGN_W, DESIGN_H = 512, 683
 local WHEEL_ROWS = 3
+local SEARCH_DEPTH = 8
 
 local M = InputContainer:extend{
     modal = false, -- KOReader dialogs opened from items must stack above the menu
     covers_fullscreen = true,
     covers_header = true,
 }
+Items.install(M)
 M.colors = { value = c_value, sub = c_sub, disabled = c_disabled, divider = c_divider, group = c_group }
 
--- Tab titles: KOReader tabs only carry an icon name.
-M.tab_titles = {
-    ["appbar.filebrowser"] = { "Files", "menu-files" },
-    ["appbar.settings"] = { "General", "menu-general" },
-    ["appbar.tools"] = { "Tools", "menu-tools" },
-    ["appbar.search"] = { "Search", "menu-search" },
-    ["appbar.menu"] = { "KOReader", "menu-main" },
-    ["appbar.navigation"] = { "Navigation", "menu-navigation" },
-    ["appbar.typeset"] = { "Typesetting", "menu-typeset" },
-    ["book.opened"] = { "Continue reading", "menu-book" },
-}
 -- Subtitles for non-obvious KOReader items, keyed by MenuSorter id.
 -- The plugin's own items carry theirs in item.hint.
 M.hints = {
@@ -72,6 +63,7 @@ M.hints = {
     sort_mixed = "Folders are sorted together with books",
     screen_dpi = "Scales the interface; Auto uses the device value",
     calibre = "Wireless transfer from Calibre on your computer",
+    localsend = "File transfer from a phone or computer",
     profiles = "Saved sets of settings you can switch between",
     news_downloader = "Downloads RSS feeds as books",
     find_book_in_calibre_catalog = "Finds books by title or author in Calibre libraries",
@@ -79,82 +71,19 @@ M.hints = {
     page_overlap = "Marks the part of the previous page after turning",
     style_tweaks = "Overrides book styles: indents, footnotes, images",
     typography = "Language rules for hyphenation and line breaks",
+    autowarmth = "By sunrise and sunset or on a schedule",
+    screensaver = "Cover, image or message",
+    screen_eink_opt = "Flashes on tap, refresh speed",
+    keep_alive = "Temporarily prevents auto-sleep",
+    language_support = "Japanese: word forms for dictionary lookup",
+    vocabbuilder = "Cards with the words you looked up",
+    show_filter = "New, reading, on hold, finished",
+    doc_setting_tweak = "Book settings by folder",
+    kindle_drawer = "Drawers, menu and Quick actions panel",
+    plugin_management = "Turn plugins on and off, needs a restart",
+    screen_notification = "Which pop-up messages to show",
 }
 
--- The first "character" can be malformed UTF-8, so the call stays guarded.
-local function caseMap(fn, fallback)
-    if not fn then return fallback end
-    return function(c)
-        local ok, result = pcall(fn, c)
-        if ok and type(result) == "string" then return result end
-        return fallback(c)
-    end
-end
-local upper = caseMap(Utf8Proc.uppercase_dumb or Utf8Proc.uppercase, string.upper)
-local lower = caseMap(Utf8Proc.lowercase_dumb or Utf8Proc.lowercase, string.lower)
-
--- Display-only capitalization; KOReader's strings stay untouched.
-function M.ucfirst(text)
-    if type(text) ~= "string" or text == "" then return text end
-    local first = text:match("^[%z\1-\127\194-\244][\128-\191]*")
-    if not first then return text end
-    local rest = text:sub(#first + 1)
-    local second = rest:match("^[%z\1-\127\194-\244][\128-\191]*")
-    if upper(first) == first then return text end -- not a lowercase letter
-    if second and lower(second) ~= second then return text end -- "eReader", "iOS"
-    return upper(first) .. rest
-end
-
-function M.splitLabel(text)
-    local label, value = text:match("^(.-):%s+(.-)%s*$")
-    if label and label ~= "" and value ~= "" then return label, value end
-    return text, nil
-end
-
-function M.tabInfo(tab)
-    local info = M.tab_titles[tab.icon]
-    if info then return tr(info[1]), info[2] end
-    return tr("Menu"), "menu-generic"
-end
-
-local function itemText(item)
-    local text = item.text_func and item.text_func() or item.text
-    return text ~= nil and tostring(text) or ""
-end
-local function itemEnabled(item)
-    local enabled = item.enabled
-    if item.enabled_func then enabled = item.enabled_func() end
-    return enabled ~= false
-end
-local function itemChecked(item)
-    local checked = item.checked
-    if item.checked_func then checked = item.checked_func() end
-    return checked and true or false
-end
-local function hasSub(item)
-    return item.sub_item_table ~= nil or item.sub_item_table_func ~= nil
-end
-local function subTable(item)
-    return item.sub_item_table_func and item.sub_item_table_func() or item.sub_item_table
-end
--- TouchMenu's id for updateItems(nil, menu_item_id).
-local function itemId(item)
-    item.menu_item_id = item.menu_item_id or tostring(item)
-    return item.menu_item_id
-end
-local function isActionTab(tab)
-    return tab.callback ~= nil and #tab == 0
-end
--- Parent of an all-radio submenu shows the selected child. Only static tables:
--- sub_item_table_func may be expensive, TouchMenu runs it only on select.
-local function radioValue(items)
-    for _, child in ipairs(items) do
-        if type(child) == "table" and not child.radio then return nil end
-    end
-    for _, child in ipairs(items) do
-        if type(child) == "table" and itemChecked(child) then return itemText(child) end
-    end
-end
 local function freeRowTexts(rows)
     for _, row in ipairs(rows or {}) do
         if row.texts then
@@ -176,11 +105,16 @@ function M:init()
     self.item_table_stack, self.path_stack = {}, {}
     self.titles, self.offsets = {}, {}
     self.at_root, self.offset, self.root_offset, self.page = true, 0, 0, 1
+    local layout = self.layout_data or {}
+    self.tab_item_table = layout.sections or {}
+    self.book_page = layout.book
     local menu = self.menu
-    -- KOReader reads menu_container[1].last_index when it closes its menu.
+    -- KOReader reads menu_container[1].last_index when it closes its menu, and
+    -- its "Menu search" calls menu_container[1]:onShowMenuSearch().
     local last = self.ui.document and menu.last_tab_index
         or G_reader_settings:readSetting("filemanagermenu_tab_index")
-    self[1] = { last_index = last or 1, handleEvent = function() return false end }
+    self[1] = { last_index = last or 1, handleEvent = function() return false end,
+        onShowMenuSearch = function() return self:onShowMenuSearch() end }
     self.ges_events = {}
     for _, name in ipairs({ "tap", "hold", "pan", "pan_release", "swipe", "multiswipe" }) do
         self.ges_events["KMenu_" .. name] = { GestureRange:new{ ges = name, range = self.dimen } }
@@ -204,47 +138,32 @@ end
 -- Rows and scrolling
 
 function M:describe(item)
-    local text = itemText(item)
-    local row = { kind = "item", item = item, enabled = itemEnabled(item), h = ROW }
-    local checked = itemChecked(item)
-    if item.radio then
-        row.kind, row.label, row.on = "radio", M.ucfirst(text), checked
-        return row
-    end
-    row.chevron = hasSub(item)
-    if item.checked_func or item.checked ~= nil then
-        row.switch, row.label = checked, M.ucfirst(text)
-    else
-        local label, value = text, nil
-        local mandatory = item.mandatory_func and item.mandatory_func() or item.mandatory
-        if mandatory ~= nil and mandatory ~= "" then
-            value = tostring(mandatory)
-        else
-            label, value = M.splitLabel(text)
-        end
-        if not value and type(item.sub_item_table) == "table" then value = radioValue(item.sub_item_table) end
-        row.label, row.value = M.ucfirst(label), value and M.ucfirst(value)
-    end
-    local hint = item.hint or M.hints[item.id]
-    if hint then row.sub, row.h = tr(hint), ROW2 end
+    local row = Items.describe(item, M.hints)
+    row.h = row.sub and ROW2 or ROW
     return row
 end
 
 function M:layout()
     local rows = {}
     if self.at_root then
-        for i, tab in ipairs(self.tab_item_table) do
-            local title, icon = M.tabInfo(tab)
-            rows[#rows + 1] = { kind = "tab", tab_index = i, label = title, icon = icon, h = ROW,
-                enabled = true, chevron = not isActionTab(tab) }
+        for _, tab in ipairs(self.tab_item_table) do
+            rows[#rows + 1] = { kind = "tab", key = tab.kd_key, label = tab.text, icon = tab.kd_icon, sub = tab.kd_hint,
+                h = tab.kd_hint and ROW2 or ROW, enabled = true, chevron = true }
         end
     else
         local items = self.item_table
+        -- Section pages group rows with captions; KOReader separators belong to its own tabs.
+        local section = items.kd_section
         for i, item in ipairs(items) do
             if type(item) == "table" then
                 item.idx = i
-                rows[#rows + 1] = self:describe(item)
-                if item.separator and i < #items then rows[#rows + 1] = { kind = "sep", h = SEP } end
+                if item.kd_caption then
+                    rows[#rows + 1] = { kind = "caption", label = Items.upper(item.kd_caption),
+                        h = #rows == 0 and CAPTION_FIRST or CAPTION }
+                else
+                    rows[#rows + 1] = self:describe(item)
+                    if item.separator and not section and i < #items then rows[#rows + 1] = { kind = "sep", h = SEP } end
+                end
             end
         end
     end
@@ -331,21 +250,25 @@ function M:showRoot()
     self:updateItems(nil, nil, self.root_offset)
 end
 
-function M:openTab(index)
-    local tab = self.tab_item_table[index]
-    if not tab then return end
-    if tab.remember ~= false then self[1].last_index = index end
-    self:closeConfigDialog()
-    if tab.callback then tab.callback() end
-    if isActionTab(tab) then
-        if not self.closed then self:closeMenu() end
-        return
+-- A page by its kd_key: a root section, "book" (book actions) or "search" (results).
+function M:sectionPage(key)
+    if self.book_page and key == "book" then return self.book_page end
+    if self.search_page and key == "search" then return self.search_page end
+    for _, section in ipairs(self.tab_item_table) do
+        if section.kd_key == key then return section end
     end
-    if self.closed then return end
+end
+
+-- standalone: opened straight on this page (book actions from Quick actions); Back closes.
+function M:openTab(key, standalone)
+    local tab = self:sectionPage(key)
+    if not tab or self.closed then return end
+    self:closeConfigDialog()
     if self.at_root then self.root_offset = self.offset end
-    self.at_root, self.cur_tab, self.item_table = false, index, tab
+    self.standalone = standalone == true
+    self.at_root, self.cur_tab, self.item_table = false, key, tab
     self.item_table_stack, self.path_stack = {}, {}
-    self.titles, self.offsets = { (M.tabInfo(tab)) }, {}
+    self.titles, self.offsets = { tab.text or "" }, {}
     self:updateItems(nil, nil, 0)
 end
 
@@ -353,8 +276,8 @@ function M:pushPage(item, sub_item_table)
     local depth = self:depth()
     self.offsets[depth] = self.offset
     table.insert(self.item_table_stack, self.item_table)
-    table.insert(self.path_stack, { idx = item.idx, text = itemText(item), sub_count = #sub_item_table })
-    itemId(item)
+    table.insert(self.path_stack, { idx = item.idx, text = Items.text(item), sub_count = #sub_item_table })
+    Items.itemId(item)
     self.titles[depth + 1] = self:describe(item).label
     self.item_table = sub_item_table
     self.offset = 0
@@ -369,6 +292,8 @@ function M:backToUpperMenu(no_close)
             self.item_table = self.item_table.refresh_func()
         end
         self:updateItems(nil, nil, self.offsets[self:depth()] or 0)
+    elseif self.standalone then
+        self:closeMenu()
     elseif not self.at_root then
         self:showRoot()
     elseif not no_close then
@@ -383,105 +308,146 @@ function M:closeConfigDialog()
     if config and config.config_dialog then self.ui:handleEvent(Event:new("CloseConfigMenu")) end
 end
 
-function M:onMenuSelect(item, tap_on_checkmark)
-    self:closeConfigDialog()
-    if tap_on_checkmark and item.checkmark_callback then
-        item.checkmark_callback()
-        self:updateItems()
-        return true
-    end
-    if item.tap_input or item.tap_input_func then
-        if not item.keep_menu_open then self:closeMenu() end
-        self:onInput(item.tap_input or item.tap_input_func())
-        return true
-    end
-    local sub_item_table = subTable(item)
-    if sub_item_table then
-        if #sub_item_table > 0 then self:pushPage(item, sub_item_table) end
-        return true
-    end
-    local callback = item.callback_func and item.callback_func() or item.callback
-    if callback then
-        -- Callbacks get us as touchmenu_instance, like TouchMenu.
-        callback(self)
-        if item.checked or item.checked_func then
-            if not (item.check_callback_updates_menu or item.check_callback_closes_menu) then self:updateItems() end
-        elseif not item.keep_menu_open then
-            self:closeMenu()
-        end
-    end
-    return true
-end
-
-function M:onMenuHold(item, text_truncated)
-    self:closeConfigDialog()
-    if item.hold_input or item.hold_input_func then
-        if item.hold_keep_menu_open == false then self:closeMenu() end
-        self:onInput(item.hold_input or item.hold_input_func())
-        return true
-    end
-    local hold_callback = item.hold_callback_func and item.hold_callback_func() or item.hold_callback
-    if hold_callback then
-        if item.hold_keep_menu_open == false then self:closeMenu() end
-        hold_callback(self, item)
-        return true
-    end
-    self:showHelp(item, text_truncated)
-    return true
-end
-
-function M:showHelp(item, text_truncated)
-    local help_text = item.help_text_func and item.help_text_func(self) or item.help_text
-    local InfoMessage = require("ui/widget/infomessage")
-    if help_text then
-        UIManager:show(InfoMessage:new{ text = help_text })
-    elseif text_truncated then
-        UIManager:show(InfoMessage:new{ text = itemText(item), show_icon = false })
-    end
-end
-
--- Open the tab and walk into each submenu of chain; stop at a leaf without running it.
-function M:openChain(tab_index, chain)
+-- Open the page and walk into each submenu of chain; stop at a leaf without running it.
+function M:openChain(key, chain, standalone)
     self.popup = nil
-    self:openTab(tab_index)
+    self:openTab(key, standalone)
     if self.closed or self.at_root then return end
-    for _, item in ipairs(chain) do
-        if not hasSub(item) or not itemEnabled(item) then
-            self:updateItems(nil, itemId(item))
+    for _, wanted in ipairs(chain) do
+        local item = Items.findIn(self.item_table, wanted)
+        if not item then return end
+        if not Items.hasSub(item) or not Items.enabled(item) then
+            self:updateItems(nil, Items.itemId(item))
             return
         end
         self:onMenuSelect(item)
     end
 end
 
+-- Page key and chain of items down to key: a MenuSorter id or one of our kd_key names.
+function M:findItem(key)
+    local function pred(item) return item.id == key or item.kd_key == key or item.kd_view_of == key end
+    local pages = {}
+    for _, section in ipairs(self.tab_item_table) do pages[#pages + 1] = section end
+    pages[#pages + 1] = self.book_page
+    for _, page in ipairs(pages) do
+        local chain = Items.findChain(page, pred, SEARCH_DEPTH)
+        if chain then return page.kd_key, chain end
+    end
+end
+
+function M:openItem(key)
+    local page, chain = self:findItem(key)
+    if page then self:openChain(page, chain) end
+    return page ~= nil
+end
+
 function M:getState()
-    return { tab = self.cur_tab, path_stack = self.path_stack, offset = self.offset }
+    return { tab = self.cur_tab, path_stack = self.path_stack, offset = self.offset, standalone = self.standalone }
 end
 
 -- Mirrors TouchMenu:restoreState from newer KOReader: match each path entry by
 -- index and text, then by text, then by submenu size.
 function M:restoreState(state)
     if not state then return end
-    if state.tab and self.at_root then self:openTab(state.tab) end
+    if state.tab and self.at_root and state.tab ~= "search" then self:openTab(state.tab, state.standalone) end
     if self.closed or self.at_root then return end
     for _, entry in ipairs(state.path_stack or {}) do
         local target, sub, candidate = nil, nil, self.item_table[entry.idx]
-        if candidate and itemText(candidate) == entry.text then target = candidate end
+        if candidate and Items.text(candidate) == entry.text then target = candidate end
         if not target then
             for _, item in ipairs(self.item_table) do
-                if type(item) == "table" and itemText(item) == entry.text then target = item; break end
+                if type(item) == "table" and Items.text(item) == entry.text then target = item; break end
             end
         end
         if not target and candidate then
-            sub = subTable(candidate)
+            sub = Items.subTable(candidate)
             if sub and #sub > 0 and entry.sub_count == #sub then target = candidate end
         end
         if not target then break end
-        sub = sub or subTable(target)
+        sub = sub or Items.subTable(target)
         if not sub or #sub == 0 then break end
         self:pushPage(target, sub)
     end
     if state.offset then self:updateItems(nil, nil, state.offset) end
+end
+
+------------------------------------------------------------------------------
+-- Menu search over the new tree (KOReader's own search walks the classic one).
+
+-- Matches of query in every page, drawer rows included: {text, path, key or drawer_tab, chain}.
+function M:search(query)
+    local found = {}
+    local function walk(items, title, entry)
+        Items.walk(items, function(item, chain)
+            local ok, text = pcall(Items.text, item)
+            if ok and text ~= "" and Items.lower(text):find(query, 1, true) then
+                local path, copy = { title }, {}
+                for i, v in ipairs(chain) do
+                    copy[i] = v
+                    if i < #chain then path[#path + 1] = Items.ucfirst((Items.splitLabel(Items.text(v)))) end
+                end
+                found[#found + 1] = { text = text, path = table.concat(path, " › "), chain = copy,
+                    key = entry.key, drawer_tab = entry.drawer_tab }
+            end
+        end, { funcs = true, search = true, depth = SEARCH_DEPTH })
+    end
+    for _, section in ipairs(self.tab_item_table) do walk(section, section.text or "", { key = section.kd_key }) end
+    if self.book_page then walk(self.book_page, self.book_page.text or "", { key = "book" }) end
+    for _, page in ipairs(self.owner.drawerSearchPages and self.owner:drawerSearchPages() or {}) do
+        walk(page.items, page.title, { drawer_tab = page.drawer_tab })
+    end
+    return found
+end
+
+function M:showSearchResults(query)
+    local _ = require("gettext") -- luacheck: ignore 421
+    local T = require("ffi/util").template
+    local found = self:search(query)
+    if #found == 0 then
+        local InfoMessage = require("ui/widget/infomessage")
+        UIManager:show(InfoMessage:new{ text = T(_("No menus containing '%1' found."), query) })
+        return
+    end
+    local page = { kd_section = true, kd_key = "search", text = _("Search results") }
+    for _, entry in ipairs(found) do
+        page[#page + 1] = { text = entry.text, hint = entry.path, keep_menu_open = true,
+            callback = function() self:openFound(entry) end }
+    end
+    self.search_page = page
+    self:openTab("search")
+end
+
+function M:openFound(entry)
+    if entry.drawer_tab then
+        self.owner:openDrawerChain(entry.drawer_tab, entry.chain)
+        return
+    end
+    self:openChain(entry.key, entry.chain)
+end
+
+-- KOReader's "Menu search" item sends ShowMenuSearch to the top widget.
+function M:onShowMenuSearch()
+    local _ = require("gettext")
+    local InputDialog = require("ui/widget/inputdialog")
+    local dialog
+    dialog = InputDialog:new{
+        title = _("Search menu entry"),
+        description = _("Search for a menu entry containing the following text (case insensitive)."),
+        input = G_reader_settings:readSetting("menu_search_string", _("Help")),
+        buttons = {{
+            { text = _("Cancel"), id = "close", callback = function() UIManager:close(dialog) end },
+            { text = _("Search"), is_enter_default = true, callback = function()
+                local query = Items.lower(dialog:getInputText())
+                G_reader_settings:saveSetting("menu_search_string", query)
+                UIManager:close(dialog)
+                if not self.closed then self:showSearchResults(query) end
+            end },
+        }},
+    }
+    UIManager:show(dialog)
+    if dialog.onShowKeyboard then dialog:onShowKeyboard() end
+    return true
 end
 
 function M:closeMenu()
@@ -609,6 +575,13 @@ function M:paintRow(bb, row, y, next_row)
         self:rect(bb, 0, y + row.h / 2, self.max > 0 and W - SCROLLBAR_COL or W, 1, c_group)
         return
     end
+    if row.kind == "caption" then
+        -- Group caption as in the mockup: a rule above (not on the first one), small uppercase text.
+        if row.y > 0 then self:rect(bb, 0, y + 6, self.max > 0 and W - SCROLLBAR_COL or W, 1, c_group) end
+        self:rowText(bb, row, "label", row.label, PAD_L, y + row.h - 12, 11.5,
+            { bold = true, color = c_sub, max_width = right - PAD_L })
+        return
+    end
     local label_x = PAD_L
     local enabled = row.enabled
     if row.kind == "tab" then
@@ -645,7 +618,7 @@ function M:paintRow(bb, row, y, next_row)
         -- Label and subtitle share the column left of the value, as in the mockup.
         self:rowText(bb, row, "sub", row.sub, label_x, y + 46, 12.5, { color = c_sub, max_width = math.max(20, limit - label_x) })
     end
-    if not (next_row and next_row.kind == "sep") then
+    if not (next_row and (next_row.kind == "sep" or next_row.kind == "caption")) then
         self:rect(bb, PAD_L, y + row.h - 1, right - PAD_L, 1, c_divider)
     end
 end
@@ -667,16 +640,26 @@ function M:paintScrollbar(bb, bar)
     self:rect(bb, bar.x - 2, bar.thumb_top, 4, bar.thumb_h, black)
 end
 
+-- ⋮ menu: book actions (in a book), the classic KOReader menu, the plugin's settings.
+function M:popupItems()
+    local items = {}
+    if self.book_page then items[#items + 1] = { id = "book", text = tr("Book actions") } end
+    items[#items + 1] = { id = "classic", text = tr("Classic KOReader menu") }
+    items[#items + 1] = { id = "plugin", text = tr("Kindle Drawer settings") }
+    return items
+end
 function M:popupRect()
-    return { x = self.W - 8 - POP_W, y = 70, w = POP_W, h = 2 * POP_ITEM }
+    return { x = self.W - 8 - POP_W, y = 70, w = POP_W, h = #self:popupItems() * POP_ITEM }
 end
 function M:paintPopup(bb)
     local p = self:popupRect()
     self:rect(bb, p.x, p.y, p.w, p.h, black)
     self:rect(bb, p.x + 1.5, p.y + 1.5, p.w - 3, p.h - 3, white)
-    self:text(bb, tr("Classic KOReader menu"), p.x + 16, p.y + POP_ITEM / 2, 14.5, { max_width = p.w - 32 })
-    self:rect(bb, p.x + 1.5, p.y + POP_ITEM, p.w - 3, 1, c_divider)
-    self:text(bb, tr("Kindle Drawer settings"), p.x + 16, p.y + POP_ITEM * 1.5, 14.5, { max_width = p.w - 32 })
+    for i, item in ipairs(self:popupItems()) do
+        local top = p.y + (i - 1) * POP_ITEM
+        if i > 1 then self:rect(bb, p.x + 1.5, top, p.w - 3, 1, c_divider) end
+        self:text(bb, item.text, p.x + 16, top + POP_ITEM / 2, 14.5, { max_width = p.w - 32 })
+    end
 end
 
 function M:paintTo(bb, x, y)
@@ -717,11 +700,15 @@ function M:popupTap(ux, uy)
         return true
     end
     self.popup = nil
-    if uy < p.y + POP_ITEM then
-        self.owner:showClassicMenu(self.cur_tab)
+    local item = self:popupItems()[math.max(1, math.min(#self:popupItems(), math.floor((uy - p.y) / POP_ITEM) + 1))]
+    if item.id == "classic" then
+        self.owner:showClassicMenu()
         return true
+    elseif item.id == "book" then
+        self:openTab("book")
+    else
+        self.owner:openMenuItem("kindle_drawer")
     end
-    self.owner:openMenuItem("kindle_drawer")
     if not self.closed then UIManager:setDirty(self, "ui", self.dimen) end
     return true
 end
@@ -750,11 +737,11 @@ function M:onKMenu_tap(_, ges)
         return true
     end
     local row = self:rowAt(uy)
-    if not row or row.kind == "sep" then return true end
+    if not row or row.kind == "sep" or row.kind == "caption" then return true end
     -- TouchMenu re-evaluates enabled_func at tap time; the row cache may be stale.
-    if row.item and not itemEnabled(row.item) then return true end
+    if row.item and not Items.enabled(row.item) then return true end
     if row.kind == "tab" then
-        self:openTab(row.tab_index)
+        self:openTab(row.key)
         return true
     end
     -- Only the switch itself is the checkmark; a chevron next to it opens the submenu.
@@ -771,7 +758,7 @@ function M:onKMenu_hold(_, ges)
     local row = self:rowAt(uy)
     if not row or not row.item then return true end
     -- TouchMenu shows help for disabled items but runs nothing else.
-    if not itemEnabled(row.item) then self:showHelp(row.item) return true end
+    if not Items.enabled(row.item) then self:showHelp(row.item) return true end
     self:onMenuHold(row.item, row.truncated)
     return true
 end

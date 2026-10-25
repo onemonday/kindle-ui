@@ -4,6 +4,7 @@ local Device = require("device")
 local Font = require("ui/font")
 local TextBoxWidget = require("ui/widget/textboxwidget")
 local Drawer = require("drawer")
+local Items = require("menuitems")
 local _ = require("gettext")
 local L10n = require("l10n")
 local tr = L10n.tr
@@ -29,6 +30,7 @@ function M:pushInline(panel, replace)
     elseif self.inline_panel and self.inline_panel.box then self.inline_panel.box:free() end
     self.inline_panel=panel; self.page=1
     self:update(); UIManager:setDirty("all","ui",self.dimen)
+    if self.menu_host then self.menu_host:sync() end
 end
 function M:backInline()
     if not self.inline_panel then return false end
@@ -38,12 +40,14 @@ function M:backInline()
     self.page=previous and previous.page or 1
     self.drag=nil
     self:update(); UIManager:setDirty("all","ui",self.dimen)
+    if self.menu_host then self.menu_host:sync() end
     return true
 end
 function M:freeInline()
     if self.inline_panel and self.inline_panel.box then self.inline_panel.box:free() end
     for _,entry in ipairs(self.inline_stack or {}) do if entry.panel and entry.panel.box then entry.panel.box:free() end end
     self.inline_panel=nil; self.inline_stack={}
+    if self.menu_host then self.menu_host:sync() end
 end
 function M:showEditor(o, replace)
     if not self:enabled(o) then return end
@@ -196,6 +200,15 @@ function M:inlineRows()
         if panel.params.other_button then rows[#rows+1]={kind="other",height=56,label=panel.params.other_button.text} end
         return rows
     elseif panel.kind=="enum" then return panel.rows
+    elseif panel.kind=="menu" then
+        local rows={}
+        for _,item in ipairs(panel.items or {}) do
+            if type(item)=="table" and not item.kd_caption then
+                local desc,cols=self:menuRow(item)
+                rows[#rows+1]={kind="menuitem",height=64,item=item,desc=desc,cols=cols}
+            end
+        end
+        return rows
     elseif panel.kind=="number" then
         return {{kind="input",height=64},
             {kind="keys",height=64,keys={"7","8","9"}},{kind="keys",height=64,keys={"4","5","6"}},
@@ -235,6 +248,8 @@ function M:paintInlineRow(bb,row)
         for i,key in ipairs(item.keys) do self:text(bb,key,(i-0.5)*750/#item.keys,y+16,25,true,false,220) end
     elseif item.kind=="text" then
         panel.box:paintTo(bb,math.floor(30*self.scale),math.floor(self.top+(y+4)*self.scale))
+    elseif item.kind=="menuitem" then
+        self:paintMenuRow(bb,item,y,item.height)
     else
         local selected=item.kind=="enum" and item.field.value==item.index
         self:text(bb,selected and "✓" or "›",48,y+19,23,true)
@@ -285,6 +300,7 @@ end
 function M:inlineTap(item,x,y,hold)
     local panel=self.inline_panel
     if not item then return true end
+    if item.kind=="menuitem" then return self:menuRowTap(item.item,item.cols,x,hold) end
     if item.kind=="field" then
         local f=item.field
         if y<50 and x>=260 then self:editField(f)
@@ -314,6 +330,98 @@ function M:inlineTap(item,x,y,hold)
         end
         self:refresh()
     end
+    return true
+end
+-- KOReader menu items inside the drawer. The host offers TouchMenu's surface to
+-- item callbacks (touchmenu_instance) and keeps item_table in step with the
+-- inline pages; selection rules are shared with the top menu (menuitems.lua).
+local Host={}
+Host.__index=Host
+function Host:closeConfigDialog() end
+function Host:pushPage(item,sub_item_table)
+    local d=self.drawer
+    d:pushInline{kind="menu",title=Items.describe(item).label,items=sub_item_table}
+end
+function Host:sync()
+    local d=self.drawer
+    local stack={}
+    for _,entry in ipairs(d.inline_stack or {}) do
+        if entry.panel and entry.panel.kind=="menu" then stack[#stack+1]=entry.panel.items end
+    end
+    local panel=d.inline_panel
+    self.item_table=panel and panel.kind=="menu" and panel.items or nil
+    self.item_table_stack=stack
+    self.page=d.page
+end
+function Host:updateItems()
+    local d=self.drawer
+    if d.closed then return end
+    local panel=d.inline_panel
+    if panel and panel.kind=="menu" and self.item_table then panel.items=self.item_table end
+    if self.page and self.page~=d.page then d.page=self.page end
+    d:update(); d:refresh()
+end
+function Host:backToUpperMenu()
+    local d=self.drawer
+    if d.inline_panel and d.inline_panel.kind=="menu" then d:backInline() end
+end
+function Host:closeMenu() if not self.drawer.closed then self.drawer:closeDialog() end end
+function Host:onInput(input) return self.drawer:onInput(input) end
+function Host:showHelp(item)
+    local help_text=item.help_text_func and item.help_text_func(self) or item.help_text
+    if help_text then self.drawer:showInfo(Items.ucfirst(Items.splitLabel(Items.text(item))),help_text) end
+end
+Items.install(Host)
+function M:menuHost()
+    if not self.menu_host then
+        self.menu_host=setmetatable({drawer=self,item_table_stack={},page=1},Host)
+    end
+    return self.menu_host
+end
+-- Display data and columns of a menu row, computed when rows are built. Paint and
+-- tap read the same columns, so the switch zone always matches the drawing.
+function M:menuRow(item)
+    local desc=Items.describe(item)
+    local cols={right=desc.chevron and 690 or 720}
+    if desc.kind~="radio" then
+        cols.label_limit=cols.right
+        if desc.switch~=nil then
+            cols.switch_left,cols.switch_right=cols.right-70,cols.right
+            cols.label_limit=cols.switch_left
+        elseif desc.value then
+            cols.value_w=math.min(300,Drawer.measure(self,desc.value,19))
+            cols.label_limit=cols.right-cols.value_w-16
+        end
+    end
+    return desc,cols
+end
+-- One KOReader item as a drawer row (row.desc, row.cols): radio mark, label, value or switch, chevron.
+function M:paintMenuRow(bb,row,y,height)
+    local desc,cols=row.desc,row.cols
+    local mid=y+height/2
+    if desc.kind=="radio" then
+        self:text(bb,desc.on and "✓" or "○",48,mid,23,true,false,nil,true)
+        self:text(bb,desc.label or "",90,mid,21,false,desc.on,620,true)
+    else
+        if desc.chevron then self:text(bb,"›",715,mid,30,true,false,nil,true) end
+        if cols.switch_left then
+            Drawer.icon(self,bb,desc.switch and "switch-on" or "switch-off",cols.switch_right-30,mid+self.top/self.scale,58)
+        elseif cols.value_w then
+            self:text(bb,desc.value,cols.right-cols.value_w,mid,19,false,false,300,true)
+        end
+        self:text(bb,desc.label or "",30,mid,21,false,true,math.max(40,cols.label_limit-40),true)
+    end
+    if not desc.enabled then self:text(bb,"—",715,y+height-24,18,true) end
+end
+function M:menuRowTap(item,cols,x,hold)
+    local host=self:menuHost()
+    if not Items.enabled(item) then
+        if hold then host:showHelp(item) end
+        return true
+    end
+    if hold then host:onMenuHold(item) return true end
+    local on_switch=cols.switch_left~=nil and x>=cols.switch_left and x<cols.switch_right
+    host:onMenuSelect(item,on_switch)
     return true
 end
 return M

@@ -7,6 +7,7 @@ local Geom = require("ui/geometry")
 local GestureRange = require("ui/gesturerange")
 local Blitbuffer = require("ffi/blitbuffer")
 local IconWidget = require("ui/widget/iconwidget")
+local Items = require("menuitems")
 local tr = require("l10n").tr
 local Screen = Device.screen
 local black, white = Blitbuffer.COLOR_BLACK, Blitbuffer.COLOR_WHITE
@@ -14,11 +15,7 @@ local black, white = Blitbuffer.COLOR_BLACK, Blitbuffer.COLOR_WHITE
 -- be stacked above KOReader's ordinary SpinWidget/ConfirmBox and swallow input.
 local Bottom = ConfigDialog:extend{ modal = false, covers_footer = true }
 
-local groups = {
-    ["appbar.textsize"] = 1, ["appbar.contrast"] = 1,
-    ["appbar.rotation"] = 2, ["appbar.crop"] = 2,
-    ["appbar.pageview"] = 3, ["appbar.pagefit"] = 3,
-}
+local priority = { font_size = 1, font_base_weight = 2, font_gamma = 3, contrast = 3, font_fine_tune = 4 }
 local function equal(a, b)
     if type(a) ~= "table" or type(b) ~= "table" then return a == b end
     if #a ~= #b then return false end
@@ -36,17 +33,11 @@ end
 function Bottom:init()
     self.images = self.images or {}
     self.full_refresh = self.owner.settings.full_refresh == true
-    self.tabs = {{title=tr("Font")}, {title=tr("Layout")}, {title=tr("Page")}, {title=tr("More")}}
-    for _, panel in ipairs(self.config_options) do
-        local tab = self.tabs[groups[panel.icon] or 4]
-        for _, option in ipairs(panel.options) do tab[#tab+1] = option end
-    end
-    local priority={font_size=1,font_base_weight=2,font_gamma=3,contrast=3,font_fine_tune=4}
-    local order={}; for i,o in ipairs(self.tabs[1]) do order[o]=i end
-    table.sort(self.tabs[1],function(a,b)
-        return (priority[a.name] or (10+order[a])) < (priority[b.name] or (10+order[b]))
-    end)
-    self.panel_index = math.max(1, math.min(4, self.panel_index or 1))
+    self:buildTabs()
+    -- panel_key is a tab key; a number is the tab index saved by earlier versions.
+    local index = type(self.panel_key) == "number" and self.panel_key or 1
+    for i, tab in ipairs(self.tabs) do if tab.key == self.panel_key then index = i end end
+    self.panel_index = math.max(1, math.min(#self.tabs, index))
     self.page = 1
     self:update()
     self.ges_events = {}
@@ -54,6 +45,54 @@ function Bottom:init()
         self.ges_events["Bottom_" .. name] = {GestureRange:new{ges=name, range=self.dimen}}
     end
     self.key_events.Close = {{"Back"}}
+end
+
+-- Tabs from the layout (layout_tabs, for this document kind): its menu rows and
+-- captions, plus ReaderConfig options by panel or by name. Every option lands once.
+function Bottom:buildTabs()
+    local named, listed = {}, {}
+    for _, tab in ipairs(self.layout_tabs) do
+        for _, seg in ipairs(tab) do
+            if seg.opt then named[seg.opt] = true end
+            if type(seg.opts) == "table" then for _, icon in ipairs(seg.opts) do listed[icon] = true end end
+        end
+    end
+    local function panelOptions(test, sort)
+        local out, order = {}, {}
+        for _, panel in ipairs(self.config_options) do
+            if test(panel.icon) then
+                for _, o in ipairs(panel.options) do
+                    if not named[o.name] then out[#out+1] = o; order[o] = #out end
+                end
+            end
+        end
+        if sort == "font" then
+            table.sort(out, function(a, b)
+                return (priority[a.name] or (10 + order[a])) < (priority[b.name] or (10 + order[b]))
+            end)
+        end
+        return out
+    end
+    self.tabs = {}
+    for _, layout_tab in ipairs(self.layout_tabs) do
+        local tab = { key = layout_tab.key, title = layout_tab.title }
+        for _, seg in ipairs(layout_tab) do
+            if seg.caption then
+                tab[#tab+1] = { kd_caption = seg.caption, kd_upper = Items.upper(seg.caption) }
+            elseif seg.item then
+                tab[#tab+1] = { kd_item = seg.item, kd_row = seg.row }
+            elseif seg.opt then
+                tab[#tab+1] = self:findOptionByName(seg.opt)
+            elseif seg.opts == "*" then
+                for _, o in ipairs(panelOptions(function(icon) return not listed[icon] end)) do tab[#tab+1] = o end
+            elseif seg.opts then
+                local set = {}
+                for _, icon in ipairs(seg.opts) do set[icon] = true end
+                for _, o in ipairs(panelOptions(function(icon) return set[icon] end, seg.sort)) do tab[#tab+1] = o end
+            end
+        end
+        self.tabs[#self.tabs+1] = tab
+    end
 end
 
 function Bottom:update()
@@ -82,8 +121,10 @@ function Bottom:update()
         for _, o in ipairs(self.tabs[self.panel_index]) do
             local show = o.show
             if o.show_func then show = o.show_func(self.configurable, self.document) end
+            if o.kd_item and o.kd_item.kd_missing then show = false end
             if show ~= false then self.rows[#self.rows+1] = o end
         end
+        Items.dropEmptyCaptions(self.rows)
     end
     -- Pagination and hit testing share the same measured row rectangles.
     self.row_pages = {{}}
@@ -94,7 +135,10 @@ function Bottom:update()
             self.row_pages[#self.row_pages+1] = {}; y = 70
         end
         local page = self.row_pages[#self.row_pages]
-        page[#page+1] = {option=o, y=y, height=height}
+        local row = {option=o, y=y, height=height}
+        -- Menu rows: display data and columns once per update, read by paint and tap.
+        if o.kd_item then row.desc, row.cols = self:menuRow(o.kd_item) end
+        page[#page+1] = row
         y = y + height
     end
     self.pages = #self.row_pages
@@ -113,6 +157,8 @@ function Bottom:rect(bb, x, y, w, h, color)
         math.max(1,math.floor(w*self.scale)), math.max(1,math.floor(h*self.scale)), color or black)
 end
 function Bottom:enabled(o)
+    if o.kd_item then return Items.enabled(o.kd_item) end
+    if o.kd_caption then return true end
     return not o.enabled_func or o.enabled_func(self.configurable, self.document)
 end
 function Bottom:title(o)
@@ -139,12 +185,15 @@ function Bottom:position(o)
     return nearest
 end
 function Bottom:isSwitch(o)
-    return o.args and #o.args==2 and type(o.args[1])=="boolean" and type(o.args[2])=="boolean"
+    return o.name ~= nil and o.args and #o.args==2 and type(o.args[1])=="boolean" and type(o.args[2])=="boolean"
 end
 function Bottom:isSlider(o)
+    if o.name == nil then return false end
     return o.buttonprogress or ((o.name == "font_size" or o.name == "font_base_weight") and #(o.values or o.args or {}) > 1)
 end
 function Bottom:optionHeight(o)
+    if o.kd_caption then return 44 end
+    if o.kd_item then return 68 end
     if self:isSlider(o) then return 126 end
     if o.item_icons or o.item_icons_func then return 86 end
     return 68
@@ -169,9 +218,11 @@ function Bottom:paintTo(bb)
         self:text(bb,self.inline_panel and self.inline_panel.title or self:title(self.choice_option),190,20,22,false,true,530)
     else
         if self.return_callback then self:text(bb,"‹ "..tr("Back"),650,20,20,false,false,90) end
+        local left,slot=self:tabSlots()
+        local size=self:tabFontSize(slot)
         for i,tab in ipairs(self.tabs) do
-            local center = 84+(i-1)*132
-            local width = self:text(bb,tab.title,center,20,22,true,i==self.panel_index,124)
+            local center = left+(i-0.5)*slot
+            local width = self:text(bb,tab.title,center,31,size,true,i==self.panel_index,slot-8,true)
             if i==self.panel_index then self:rect(bb,center-width/2,57,width,3) end
         end
     end
@@ -184,6 +235,10 @@ function Bottom:paintTo(bb)
             local selected = o.choice_index and equal(self:current(self.choice_option),values[o.choice_index])
             self:text(bb,selected and "✓" or (o.more and "›" or "○"),48,y+20,23,true)
             self:text(bb,o.label,90,y+20,21,false,selected,620)
+        elseif o.kd_caption then
+            self:text(bb,o.kd_upper,30,y+row.height-24,16,false,true,690,true)
+        elseif o.kd_item then
+            self:paintMenuRow(bb,row,y,row.height)
         else
             local enabled=self:enabled(o)
             self:text(bb,self:title(o),30,y+row.height/2,21,false,true,260,true)
@@ -221,7 +276,7 @@ function Bottom:paintTo(bb)
             end
             if not enabled then self:text(bb,"—",715,y+row.height-24,18,true) end
         end
-        self:rect(bb,30,y+row.height-1,690,1,Blitbuffer.COLOR_LIGHT_GRAY)
+        if not o.kd_caption then self:rect(bb,30,y+row.height-1,690,1,Blitbuffer.COLOR_LIGHT_GRAY) end
     end
     if self.inline_panel then self:paintInlineFooter(bb); return end
     local y=self.height/self.scale-38
@@ -233,10 +288,30 @@ function Bottom:paintTo(bb)
     end
 end
 
+-- Equal header slots for the tabs, left of "‹ Back" when it is shown.
+function Bottom:tabSlots()
+    local left, right = 10, self.return_callback and 630 or 740
+    return left, (right-left)/#self.tabs
+end
+-- Largest title size at which every tab title fits its slot, bold as when active.
+function Bottom:tabFontSize(slot)
+    local key=slot..":"..self.scale
+    if self.tab_font and self.tab_font.key==key then return self.tab_font.size end
+    local chosen=16
+    for _,size in ipairs({22,21,20,19,18,17}) do
+        local fits=true
+        for _,tab in ipairs(self.tabs) do
+            if Drawer.measure(self,tab.title,size,true)>slot-8 then fits=false; break end
+        end
+        if fits then chosen=size; break end
+    end
+    self.tab_font={key=key,size=chosen}
+    return chosen
+end
 function Bottom:rowAt(pos)
     local y=(pos.y-self.top)/self.scale
     for _,row in ipairs(self.page_rows) do
-        if y>=row.y and y<row.y+row.height then return row.option,row.y end
+        if y>=row.y and y<row.y+row.height then return row.option,row.y,row end
     end
 end
 
@@ -286,8 +361,9 @@ function Bottom:onBottom_tap(_,ges)
             return true
         end
         if x>=630 and self.return_callback then return self:onClose() end
-        local index=math.floor((x-22)/132)+1
-        if x>=22 and index>=1 and index<=4 then self:selectTab(index) end
+        local left,slot=self:tabSlots()
+        local index=math.floor((x-left)/slot)+1
+        if x>=left and index>=1 and index<=#self.tabs then self:selectTab(index) end
         return true
     end
     if y>=self.height/self.scale-42 then
@@ -297,7 +373,7 @@ function Bottom:onBottom_tap(_,ges)
         elseif x<595 then self:turnPage(-1) else self:turnPage(1) end
         return true
     end
-    local o,row_y=self:rowAt(ges.pos)
+    local o,row_y,page_row=self:rowAt(ges.pos)
     if self.inline_panel then return self:inlineTap(o,x,y-(row_y or 0)) end
     if self.choice_option then
         if o then
@@ -310,6 +386,8 @@ function Bottom:onBottom_tap(_,ges)
         end
         return true
     end
+    if o and o.kd_caption then return true end
+    if o and o.kd_item then return self:menuRowTap(o.kd_item,page_row.cols,x) end
     if not o or not self:enabled(o) then return true end
     if x>=695 and o.more_options then self:more(o)
     elseif self:isSlider(o) and x>=290 then self:adjust(o,x)
@@ -345,9 +423,10 @@ function Bottom:onClose()
 end
 function Bottom:onBottom_hold(_,ges)
     if self.skip_paint then return true end
-    local o,row_y=self:rowAt(ges.pos)
+    local o,row_y,page_row=self:rowAt(ges.pos)
     if self.inline_panel then return self:inlineTap(o,ges.pos.x/self.scale,(ges.pos.y-self.top)/self.scale-(row_y or 0),true) end
-    if not o then return true end
+    if not o or o.kd_caption then return true end
+    if o.kd_item then return self:menuRowTap(o.kd_item,page_row.cols,ges.pos.x/self.scale,true) end
     if self.choice_option then
         local option=self.choice_option
         if self:enabled(option) and o.choice_index then
@@ -433,9 +512,32 @@ function Bottom:onCloseWidget()
         self.reader_config.config_dialog=nil
         self.ui:handleEvent(require("ui/event"):new("RestoreHinting"))
     end
-    self.owner.settings.bottom_tab=self.panel_index
+    self.owner.settings.bottom_tab=nil
+    self.owner.settings.bottom_tab_key=self.tabs[self.panel_index] and self.tabs[self.panel_index].key
     self.owner:save()
     UIManager:setDirty(nil,self.full_refresh and "full" or "partial",Screen:getSize())
+end
+-- A menu search result: open its tab, then walk the chain into inline pages.
+function Bottom:openMenuChain(tab_key, chain)
+    for i, tab in ipairs(self.tabs) do
+        if tab.key == tab_key then self:selectTab(i) end
+    end
+    local host = self:menuHost()
+    for k, wanted in ipairs(chain) do
+        local item
+        if k == 1 then
+            for page, rows in ipairs(self.row_pages) do
+                for _, row in ipairs(rows) do
+                    if row.option.kd_item == wanted then item = wanted; self.page = page end
+                end
+            end
+            self:update(); self:refresh()
+        else
+            item = Items.findIn(host.item_table, wanted)
+        end
+        if not item or not Items.hasSub(item) or not Items.enabled(item) then return end
+        host:onMenuSelect(item)
+    end
 end
 for name,method in pairs(require("inlinepanels")) do Bottom[name]=method end
 return Bottom

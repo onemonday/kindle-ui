@@ -72,10 +72,23 @@ function Drawer:refresh()
     UIManager:setDirty(self, "ui", Geom:new{ x = 0, y = 0, w = self.dimen.w, h = self.height })
 end
 
-function Drawer:text(bb, value, x, y, size, centered, bold, max_width, vertically_centered)
-    local widget = TextWidget:new{ text = value, face = Drawer.face(size, self.scale),
+-- Text widget for value at size in design units; max_width in units, nil for none.
+function Drawer:textWidget(value, size, bold, max_width)
+    return TextWidget:new{ text = value, face = Drawer.face(size, self.scale),
         bold = bold, padding = 0, lang = L10n.language(), para_direction_rtl = false,
-        max_width = math.floor((max_width or (centered and 235 or 600)) * self.scale) }
+        max_width = max_width and math.floor(max_width * self.scale) }
+end
+
+-- Width of value in design units, measured like Drawer:text paints it.
+function Drawer:measure(value, size, bold)
+    local widget = Drawer.textWidget(self, tostring(value), size, bold)
+    local width = widget:getSize().w
+    widget:free()
+    return width / self.scale
+end
+
+function Drawer:text(bb, value, x, y, size, centered, bold, max_width, vertically_centered)
+    local widget = Drawer.textWidget(self, value, size, bold, max_width or (centered and 235 or 600))
     local width = widget:getSize().w
     local height = widget:getSize().h
     widget:paintTo(bb, math.floor(self.offset + x * self.scale - (centered and width / 2 or 0)),
