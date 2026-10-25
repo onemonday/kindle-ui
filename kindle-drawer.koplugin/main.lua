@@ -285,6 +285,63 @@ function Plugin:activate(id)
     end
 end
 
+-- Long press opens the button's own settings; buttons without any act as on tap.
+-- Dark Mode ignores it, so a long press never toggles the theme by accident.
+local settings_menus = { sync = "progress_sync", ssh = "ssh" }
+function Plugin:openSettings(id)
+    if id == "wifi" then self:closeDrawer(); self:showNetworks()
+    elseif id == "light" then self:closeDrawer(); Device:showLightDialog()
+    elseif settings_menus[id] then self:closeDrawer(); self:openMenuItem(settings_menus[id])
+    elseif id ~= "night" then self:activate(id) end
+end
+
+function Plugin:showNetworks()
+    if not NetworkMgr:isWifiOn() then
+        -- KOReader's own long-press path: turn Wi-Fi on, then show the network list.
+        return NetworkMgr:toggleWifiOn(nil, true, true)
+    end
+    local info = InfoMessage:new{ text = tr("Scanning for networks…") }
+    UIManager:show(info)
+    UIManager:forceRePaint()
+    local networks, err = NetworkMgr:getNetworkList()
+    -- Like KOReader: the first scan after a state change may come back empty.
+    if networks and #networks == 0 then networks, err = NetworkMgr:getNetworkList() end
+    UIManager:close(info)
+    if not networks then
+        UIManager:show(InfoMessage:new{ text = err or tr("This device cannot list Wi-Fi networks.") })
+        return
+    end
+    table.sort(networks, function(a, b) return a.signal_quality > b.signal_quality end)
+    UIManager:show(require("ui/widget/networksetting"):new{ network_list = networks })
+end
+
+-- Open the stock main menu already inside a plugin's submenu, so Back walks up the usual tree.
+-- MenuSorter moves placed items out of menu_items and tags each with its key as `id`.
+function Plugin:openMenuItem(key)
+    local menu = self.ui.menu
+    if not menu.tab_item_table then menu:setUpdateItemTable() end
+    local function find(items, chain)
+        for _, item in ipairs(items) do
+            if type(item) == "table" then
+                chain[#chain + 1] = item
+                if item.id == key or (item.sub_item_table and find(item.sub_item_table, chain)) then return true end
+                chain[#chain] = nil
+            end
+        end
+    end
+    for tab, items in ipairs(menu.tab_item_table) do
+        local chain = {}
+        if find(items, chain) then
+            menu:onShowMenu(tab, true)
+            local touch_menu = menu.menu_container[1]
+            for _, item in ipairs(chain) do touch_menu:onMenuSelect(item) end
+            UIManager:show(menu.menu_container)
+            return
+        end
+    end
+    menu:onShowMenu()
+end
+
 function Plugin:onSuspend() self:closeDrawer(); self:closeBottomDrawer(); self:closeQuickActionsPanel() end
 function Plugin:onSetDimensions() self:onSuspend() end
 function Plugin:onCloseWidget()

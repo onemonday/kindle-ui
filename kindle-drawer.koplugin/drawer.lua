@@ -47,7 +47,7 @@ function Drawer:init()
         self.sliders[#self.sliders + 1] = { id = "warmth", title = tr("Warmth"), y = sy, min = 0, max = 24 }
     end
     self.ges_events = {}
-    for _, name in ipairs({ "tap", "pan", "pan_release", "swipe", "multiswipe" }) do
+    for _, name in ipairs({ "tap", "hold", "pan", "pan_release", "swipe", "multiswipe" }) do
         self.ges_events["Drawer_" .. name] = {
             GestureRange:new{ ges = name, range = self.dimen },
         }
@@ -191,18 +191,32 @@ function Drawer:adjust(slider, x)
     self:refresh()
 end
 
+function Drawer:buttonAt(pos)
+    local x, y = (pos.x - self.offset) / self.scale, pos.y / self.scale
+    for _, target in ipairs(self.targets) do
+        if math.abs(x - target.x) < 105 and y >= target.y - 40 and y <= target.y + 95 then
+            return target.button
+        end
+    end
+end
+
 function Drawer:onDrawer_tap(_, ges)
     local x, y = (ges.pos.x - self.offset) / self.scale, ges.pos.y / self.scale
     if ges.pos.y >= self.height - 55 * self.scale then return self:onClose() end
-    for _, target in ipairs(self.targets) do
-        if math.abs(x - target.x) < 105 and y >= target.y - 40 and y <= target.y + 95 then
-            self.owner:activate(target.button.id)
-            return true
-        end
+    local button = self:buttonAt(ges.pos)
+    if button then
+        self.owner:activate(button.id)
+        return true
     end
     for _, slider in ipairs(self.sliders) do
         if y >= slider.y + 65 and y <= slider.y + 125 then self:adjust(slider, x); return true end
     end
+    return true
+end
+
+function Drawer:onDrawer_hold(_, ges)
+    local button = self:buttonAt(ges.pos)
+    if button then self.owner:openSettings(button.id) end
     return true
 end
 
