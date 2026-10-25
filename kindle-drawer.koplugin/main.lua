@@ -26,21 +26,10 @@ function Plugin:init()
     -- Patch only this UI instance; keep the original entry points for teardown.
     self.hooks = {}
     local menu = self.ui.menu
-    for _, name in ipairs({ "onTapShowMenu", "onSwipeShowMenu" }) do
+    for _, name in ipairs({ "onTapShowMenu", "onSwipeShowMenu", "onPressMenu", "onShowMenu", "onRebuildMenu" }) do
         local original = menu[name]
         if original then
-            local hook = function(target, ges)
-                if name == "onTapShowMenu" and self.ui.document
-                        and Device:isTouchDevice() and self.settings.quick_actions_enabled ~= false then
-                    return self:onQuickActionsPanel()
-                elseif name == "onSwipeShowMenu" and self.settings.enabled ~= false
-                        and ges.direction == "south" then
-                    self:onKindleDrawer()
-                    self.ui:handleEvent(Event:new("HandledAsSwipe"))
-                    return true
-                end
-                return original(target, ges)
-            end
+            local hook = function(target, ...) return self:menuHook(name, original, target, ...) end
             self.hooks[name] = { original = original, hook = hook }
             menu[name] = hook
         end
@@ -54,6 +43,44 @@ function Plugin:init()
         end
         config.onShowConfigMenu = self.bottom_hook
     end
+end
+
+-- Top menu entry points. The Kindle-style menu replaces the stock TouchMenu
+-- only on touch devices; callers that need the stock menu_container (do_not_show)
+-- keep the original path.
+function Plugin:menuHook(name, original, menu, ...)
+    if name == "onTapShowMenu" then
+        if self:onQuickActionsPanel() then return true end
+        if menu.activation_menu ~= "swipe" and self:onKindleSettingsMenu() then return true end
+    elseif name == "onSwipeShowMenu" then
+        local ges = ...
+        if ges.direction == "south" and (self.settings.enabled ~= false and self:onKindleDrawer()
+                or menu.activation_menu ~= "tap" and self:onKindleSettingsMenu()) then
+            self.ui:handleEvent(Event:new("HandledAsSwipe"))
+            return true
+        end
+    elseif name == "onPressMenu" then
+        if self:onKindleSettingsMenu() then return true end
+    elseif name == "onShowMenu" then
+        local tab_index, do_not_show = ...
+        if do_not_show then
+            self:closeSettingsMenu()
+        elseif self:onKindleSettingsMenu(tab_index) then
+            return true
+        end
+    elseif name == "onRebuildMenu" and self.settings_menu then
+        -- Rebuild the item tables, then reopen the same page in the new tables.
+        local state = self.settings_menu:getState()
+        self:closeSettingsMenu()
+        local result = original(menu, ...)
+        if self:onKindleSettingsMenu() then self.settings_menu:restoreState(state) end
+        return result
+    end
+    return original(menu, ...)
+end
+
+function Plugin:kindleMenuActive()
+    return self.settings.kindle_menu ~= false and Device:isTouchDevice()
 end
 
 function Plugin:onDispatcherRegisterActions()
@@ -81,6 +108,9 @@ function Plugin:addToMainMenu(items)
     end
     items.kindle_drawer = {
         text = tr("Kindle Drawer"), sorting_hint = "more_tools", sub_item_table = {
+            { text = tr("Kindle-style menu"), hint = "Replaces the KOReader top menu", separator = true,
+              checked_func = function() return self.settings.kindle_menu ~= false end,
+              callback = function() self.settings.kindle_menu = self.settings.kindle_menu == false; self:save() end },
             { text = tr("Enable top drawer"),
               checked_func = function() return self.settings.enabled ~= false end,
               callback = function() self:closeDrawer(); self.settings.enabled = self.settings.enabled == false; self:save() end },
@@ -112,7 +142,7 @@ function Plugin:addToMainMenu(items)
                   self.settings.quick_actions_enabled = self.settings.quick_actions_enabled == false
                   self:save()
               end },
-            { text = tr("Full refresh on open and close"),
+            { text = tr("Full refresh on open and close"), hint = "Clears e-ink ghosting, a bit slower",
               checked_func = function() return self.settings.full_refresh == true end,
               callback = function()
                   self.settings.full_refresh = not self.settings.full_refresh
@@ -182,9 +212,16 @@ function Plugin:buttons()
     return result
 end
 
+-- Close every panel except keep ("drawer", "bottom_drawer", "quick_actions_panel" or "settings_menu").
+function Plugin:closePanels(keep)
+    if keep ~= "drawer" then self:closeDrawer() end
+    if keep ~= "bottom_drawer" then self:closeBottomDrawer() end
+    if keep ~= "quick_actions_panel" then self:closeQuickActionsPanel() end
+    if keep ~= "settings_menu" then self:closeSettingsMenu() end
+end
+
 function Plugin:onKindleDrawer()
-    self:closeQuickActionsPanel()
-    self:closeBottomDrawer()
+    self:closePanels("drawer")
     if not self.drawer then
         self.drawer = Drawer:new{ owner = self, buttons = self:buttons() }
         UIManager:show(self.drawer, self.drawer.full_refresh and "full" or "ui", Device.screen:getSize())
@@ -197,8 +234,7 @@ function Plugin:onKindleBottomDrawer(return_callback)
     if not config or not self.ui.document then return false end
     if not Device:isTouchDevice() then return self:showOriginalBottom() end
     if self.bottom_drawer then return true end
-    self:closeDrawer()
-    self:closeQuickActionsPanel()
+    self:closePanels("bottom_drawer")
     if config.config_dialog then config:onCloseConfigMenu() end
     local BottomDrawer = require("bottomdrawer")
     self.bottom_drawer = BottomDrawer:new{
@@ -216,8 +252,7 @@ end
 
 function Plugin:onQuickActionsPanel()
     if not self.ui.document or not Device:isTouchDevice() or self.settings.quick_actions_enabled == false then return false end
-    self:closeDrawer()
-    self:closeBottomDrawer()
+    self:closePanels("quick_actions_panel")
     if not self.quick_actions_panel then
         local Panel=require("quickactionspanel")
         self.quick_actions_panel=Panel:new{owner=self,ui=self.ui,document=self.ui.document}
@@ -254,7 +289,7 @@ end
 function Plugin:activate(id)
     if id == "settings" then
         self:closeDrawer()
-        self.ui.menu:onShowMenu() -- Original KOReader menu, without recursive interception.
+        self.ui.menu:onShowMenu() -- Kindle-style menu when enabled, else the stock one.
     elseif id == "wifi" then
         self:closeDrawer()
         if NetworkMgr:isWifiOn() then NetworkMgr:toggleWifiOff(nil, true)
@@ -315,11 +350,8 @@ function Plugin:showNetworks()
     UIManager:show(require("ui/widget/networksetting"):new{ network_list = networks })
 end
 
--- Open the stock main menu already inside a plugin's submenu, so Back walks up the usual tree.
 -- MenuSorter moves placed items out of menu_items and tags each with its key as `id`.
-function Plugin:openMenuItem(key)
-    local menu = self.ui.menu
-    if not menu.tab_item_table then menu:setUpdateItemTable() end
+local function findMenuItem(tab_item_table, key)
     local function find(items, chain)
         for _, item in ipairs(items) do
             if type(item) == "table" then
@@ -329,25 +361,84 @@ function Plugin:openMenuItem(key)
             end
         end
     end
-    for tab, items in ipairs(menu.tab_item_table) do
+    for tab, items in ipairs(tab_item_table) do
         local chain = {}
-        if find(items, chain) then
-            menu:onShowMenu(tab, true)
-            local touch_menu = menu.menu_container[1]
-            for _, item in ipairs(chain) do touch_menu:onMenuSelect(item) end
-            UIManager:show(menu.menu_container)
-            return
-        end
+        if find(items, chain) then return tab, chain end
+    end
+end
+
+-- Open the main menu already inside a plugin's submenu, so Back walks up the usual tree.
+function Plugin:openMenuItem(key)
+    if self:onKindleSettingsMenu() then
+        local tab, chain = findMenuItem(self.settings_menu.tab_item_table, key)
+        if tab then self.settings_menu:openChain(tab, chain) end
+        return
+    end
+    local menu = self.ui.menu
+    if not menu.tab_item_table then menu:setUpdateItemTable() end
+    local tab, chain = findMenuItem(menu.tab_item_table, key)
+    if tab then
+        menu:onShowMenu(tab, true)
+        local touch_menu = menu.menu_container[1]
+        for _, item in ipairs(chain) do touch_menu:onMenuSelect(item) end
+        UIManager:show(menu.menu_container)
+        return
     end
     menu:onShowMenu()
 end
 
-function Plugin:onSuspend() self:closeDrawer(); self:closeBottomDrawer(); self:closeQuickActionsPanel() end
-function Plugin:onSetDimensions() self:onSuspend() end
+-- Kindle-style top menu: root page, or the tab's page with Back to the root.
+function Plugin:onKindleSettingsMenu(tab_index)
+    if not self:kindleMenuActive() then return false end
+    self:closePanels("settings_menu")
+    local menu = self.ui.menu
+    if not menu.tab_item_table then menu:setUpdateItemTable() end
+    local tab = tab_index and menu.tab_item_table[tab_index]
+    -- Like TouchMenu, never auto-run an action tab such as the file browser.
+    if tab and tab.remember == false then tab_index = nil end
+    if self.settings_menu then
+        if tab_index then self.settings_menu:openTab(tab_index) end
+        return true
+    end
+    if menu.menu_container then self:closeTopMenu() end -- the stock menu is open
+    if self.ui.keyselection then self.ui.keyselection:stopHighlightIndicator(true) end
+    local SettingsMenu = require("settingsmenu")
+    local widget = SettingsMenu:new{ owner = self, ui = self.ui, menu = menu, tab_item_table = menu.tab_item_table }
+    widget:closeConfigDialog()
+    self.settings_menu = widget
+    -- KOReader closes its menu through menu_container (item callbacks, reader teardown).
+    menu.menu_container = widget
+    if tab_index then widget:openTab(tab_index) end
+    UIManager:show(widget, widget.full_refresh and "full" or "flashui")
+    return true
+end
+
+function Plugin:closeSettingsMenu()
+    if self.settings_menu then self.settings_menu:closeMenu() end
+end
+
+-- Close whatever menu_container holds (stock TouchMenu or ours) the way KOReader does,
+-- so it saves the last tab.
+function Plugin:closeTopMenu()
+    local menu = self.ui.menu
+    if menu.onCloseReaderMenu then menu:onCloseReaderMenu()
+    elseif menu.onCloseFileManagerMenu then menu:onCloseFileManagerMenu() end
+end
+
+-- The stock TouchMenu, bypassing our onShowMenu hook.
+function Plugin:showClassicMenu(tab_index)
+    self:closeSettingsMenu()
+    local entry = self.hooks.onShowMenu
+    local show = entry and entry.original or self.ui.menu.onShowMenu
+    return show(self.ui.menu, tab_index)
+end
+
+function Plugin:onSuspend() self:closePanels() end
+-- ReaderMenu/FileManagerMenu:onSetDimensions close and reopen the settings menu
+-- themselves (menu_container, then the hooked onShowMenu).
+function Plugin:onSetDimensions() self:closePanels("settings_menu") end
 function Plugin:onCloseWidget()
-    self:closeQuickActionsPanel()
-    self:closeDrawer()
-    self:closeBottomDrawer()
+    self:closePanels()
     if self.ui.config and self.ui.config.onShowConfigMenu == self.bottom_hook then
         self.ui.config.onShowConfigMenu = self.bottom_original
     end

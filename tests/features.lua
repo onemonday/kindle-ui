@@ -34,7 +34,7 @@ p4:activate("ssh"); assert(running)
 p4:activate("ssh"); assert(not running and toggles==2)
 p4.ui.SSH=nil; assert(not p4:available("ssh"))
 local items={}; p4:addToMainMenu(items)
-local ssh_item=items.kindle_drawer.sub_item_table[2].sub_item_table[2].sub_item_table[6]
+local ssh_item=items.kindle_drawer.sub_item_table[3].sub_item_table[2].sub_item_table[6]
 ssh_item.callback(); assert(p4.settings.hidden.ssh==true)
 ssh_item.callback(); assert(p4.settings.hidden.ssh==false)
 p4:onCloseWidget()
@@ -105,8 +105,8 @@ for _,dim in ipairs({false,true}) do
 end
 G_reader_settings.data={}; local q=Plugin:new{ui=newUI()}; local items={}; q:addToMainMenu(items)
 local options=items.kindle_drawer.sub_item_table
-assert(options[2].sub_item_table[4].checked_func() and not options[6].checked_func())
-options[2].sub_item_table[4].callback(); options[6].callback()
+assert(options[3].sub_item_table[4].checked_func() and not options[7].checked_func())
+options[3].sub_item_table[4].callback(); options[7].callback()
 assert(q.settings.dim_background==false and q.settings.full_refresh==true)
 q:onKindleDrawer(); q:onSuspend(); assert(manager.last_dirty.refresh=="full")
 q:onCloseWidget()
@@ -166,6 +166,7 @@ function manager:forceRePaint() end
 local lights=0; function device:showLightDialog() lights=lights+1 end
 package.preload["ui/widget/networksetting"]=function() return Base end
 local h=Plugin:new{ui=newUI()}; h.ui.SSH={isRunning=function() return false end}
+h.settings.kindle_menu=false -- stock TouchMenu path; tests/menu.lua covers the Kindle-style one
 local menu=h.ui.menu
 local sync_item={id="progress_sync",text="Progress sync",sub_item_table={{text="Server"}}}
 local ssh_item={id="ssh",text="SSH server",sub_item_table={{text="Port"}}}
