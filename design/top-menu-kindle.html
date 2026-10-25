@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>KOReader top menu in Kindle style — mockup</title>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0}
+.wrap{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap;font-family:var(--font-sans,system-ui,sans-serif);color:var(--foreground,#222)}
+.side{flex:1 1 220px;min-width:220px;font-size:13px;line-height:1.45}
+.side h4{margin:0 0 6px;font-size:12px;font-weight:600;color:var(--muted-foreground,#777);text-transform:uppercase;letter-spacing:.04em}
+.seg{display:flex;border:1px solid var(--border,#ccc);border-radius:var(--radius,8px);overflow:hidden;margin-bottom:14px}
+.seg button{flex:1;border:0;background:transparent;color:inherit;font:inherit;padding:7px 6px;cursor:pointer}
+.seg button.on{background:var(--primary,#111);color:var(--primary-foreground,#fff)}
+.side ul{margin:0;padding-left:16px;color:var(--muted-foreground,#666)}
+.side li{margin-bottom:4px}
+.side b{color:var(--foreground,#222);font-weight:600}
+.kindle{flex:0 0 auto;width:468px;background:#1d1d1f;border-radius:34px;padding:28px 24px 50px;position:relative}
+.kindle::after{content:"kindle";position:absolute;bottom:14px;left:0;right:0;text-align:center;color:#8d8d8d;font:600 17px/1 "Helvetica Neue",Arial,sans-serif;letter-spacing:.3px}
+.screen{width:420px;height:560px;background:#fff;position:relative;overflow:hidden;color:#111;user-select:none;font-family:"Amazon Ember","Helvetica Neue",Helvetica,Arial,sans-serif;cursor:default}
+.status{height:30px;display:flex;align-items:center;padding:0 14px;font-size:12px;position:relative}
+.status .r{margin-left:auto;display:flex;align-items:center;gap:6px}
+.status .handle{position:absolute;left:50%;top:4px;transform:translateX(-50%);padding:4px 10px;cursor:pointer}
+.titlebar{height:48px;display:flex;align-items:center;padding:0 6px 0 4px;border-bottom:1px solid #c8c8c8}
+.titlebar .ttl{flex:1;font-size:16px;font-weight:700;padding-left:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.titlebar .back + .ttl{padding-left:0}
+.ib{width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:4px}
+.ib:active{background:#e6e6e6}
+.vp{position:absolute;left:0;right:0;bottom:0;overflow:hidden;touch-action:none}
+.content{will-change:transform}
+.row{display:flex;align-items:center;padding:0 32px 0 24px;position:relative;cursor:pointer}
+.row::after{content:"";position:absolute;left:24px;right:32px;bottom:0;height:1px;background:#e2e2e2}
+/* Scrollable list: rows stop before a separate scrollbar column, as on Kindle */
+.vp.scroll .row{padding-right:58px}
+.vp.scroll .row::after{right:58px}
+.vp.scroll .gsep::after{right:46px}
+.row.nodiv::after{display:none}
+.row.press{background:#ececec}
+.row .ico{width:24px;margin-right:16px;display:flex}
+.row .txt{flex:1;min-width:0}
+.row .lbl{font-size:15.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .sub{font-size:12.5px;color:#555;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .val{font-size:13.5px;color:#333;margin-left:12px;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .chev{margin-left:14px;display:flex}
+.row.dis{cursor:default}.row.dis .lbl{color:#a3a3a3;font-weight:500}
+.radio{width:20px;height:20px;border:2px solid #111;border-radius:50%;margin-right:16px;flex:0 0 auto;display:flex;align-items:center;justify-content:center}
+.radio.on::after{content:"";width:10px;height:10px;border-radius:50%;background:#111}
+.sw{width:46px;height:26px;border-radius:13px;border:2px solid #111;position:relative;margin-left:12px;flex:0 0 auto}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;border:2px solid #111;background:#fff;transition:left .12s}
+.sw.on{background:#111}.sw.on::after{left:22px;border-color:#fff}
+.gsep{position:relative}
+.gsep::after{content:"";position:absolute;left:0;right:0;top:50%;height:1px;background:#8f8f8f}
+.sbar{position:absolute;right:14px;width:14px;display:flex;flex-direction:column;align-items:center}
+.sbar .arr{height:18px;width:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:9px}
+.sbar .arr.off{color:#c4c4c4;cursor:default}
+.sbar .track{flex:1;width:2px;background:#e3e3e3;position:relative;margin:2px 0}
+.sbar .thumb{position:absolute;left:-1px;width:4px;background:#111;border-radius:2px}
+.pop{position:absolute;right:8px;top:70px;background:#fff;border:1.5px solid #111;border-radius:4px;width:236px;z-index:5}
+.pop div{padding:13px 16px;font-size:14.5px;cursor:pointer;border-bottom:1px solid #e2e2e2}
+.pop div:last-child{border-bottom:0}
+.toast{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);background:#111;color:#fff;font-size:13px;padding:9px 14px;border-radius:6px;max-width:360px;text-align:center;z-index:9;opacity:0;transition:opacity .15s;pointer-events:none}
+.toast.show{opacity:1}
+.bg{position:absolute;inset:0}
+.bg .hint{position:absolute;left:0;right:0;top:0;height:64px;border-bottom:1px dashed #9a9a9a;display:flex;align-items:center;justify-content:center;font-size:12.5px;color:#555;cursor:pointer;background:#fafafa}
+.bg .fm{position:absolute;top:64px;left:0;right:0}
+.bg .fm div{display:flex;justify-content:space-between;padding:16px 20px;border-bottom:1px solid #d6d6d6;font-weight:700;font-size:15px}
+.bg .fm span{font-weight:400;font-size:12px;color:#444}
+.bg .book{position:absolute;top:84px;left:30px;right:30px;font:15px/1.6 Georgia,serif;text-align:justify;color:#222}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="side">
+    <h4>Где открыто меню</h4>
+    <div class="seg" id="ctx"><button data-v="fm" class="on">Файлы</button><button data-v="rd">Книга</button></div>
+    <h4>Как переводятся пункты</h4>
+    <ul>
+      <li><b>Подменю</b> → строка со стрелкой, открывает страницу с «←».</li>
+      <li><b>Флажок</b> → переключатель справа.</li>
+      <li><b>Выбор одного</b> → кружки; выбранное видно справа в родительской строке.</li>
+      <li><b>«Sort by: name»</b> → название слева, значение справа.</li>
+      <li><b>Первая буква</b> названий и значений заглавная: «name» → «Name».</li>
+      <li><b>Подпись</b> только у неочевидных пунктов: Start with, Style tweaks, OPDS catalog.</li>
+      <li><b>Разделитель</b> → отступ с тёмной линией.</li>
+      <li><b>Недоступный пункт</b> → серый текст.</li>
+      <li><b>Длинный список</b> прокручивается пальцем или колесом, после отпускания строка встаёт ровно по верхнему краю. ▲▼ прокручивают на экран.</li>
+      <li><b>Шеврон</b> над заголовком открывает верхнюю шторку, <b>⋮</b> — классическое меню.</li>
+    </ul>
+  </div>
+  <div class="kindle"><div class="screen" id="scr"></div></div>
+</div>
+<script>
+const R = (opts, sel, x={}) => Object.assign({radio: opts, sel}, x);
+const T = (t, x={}) => Object.assign({t}, x);
+const LANGS = ['Bahasa Indonesia','Català','Čeština','Dansk','Deutsch','English','Español','Esperanto','Euskara','Français','Galego','Hrvatski','Italiano','Magyar','Nederlands','Norsk','Polski','Português','Português do Brasil','Română','Slovenčina','Suomi','Svenska','Tiếng Việt','Türkçe','Ελληνικά','Български','Русский','Српски','Українська','עברית','العربية','فارسی','한국어','中文','日本語'];
+const FONTS = ['Bookerly','Caecilia','Charis SIL','DejaVu Serif','EB Garamond','FreeSerif','Literata','Merriweather','Noto Sans','Noto Serif','Open Sans','PT Serif','Source Serif 4','Vollkorn'];
+
+const DRAWER = T('Kindle Drawer', {sub:[
+  T('Kindle-style menu', {check:true, hint:'Replaces the KOReader top menu', sep:true}),
+  T('Enable top drawer', {check:true}),
+  T('Top drawer settings', {sub:[T('Drawer buttons',{sub:[T('Wi-Fi',{check:true}),T('Dark mode',{check:true}),T('Sync',{check:true}),T('Frontlight',{check:true}),T('Power',{check:true}),T('SSH server',{check:false})]}),T('Header title: Kindle',{dialog:1}),T('Dim background',{check:true})], sep:true}),
+  T('Enable bottom drawer', {check:true}),
+  T('Bottom drawer settings', {sub:[T('Remember last tab',{check:true})], sep:true}),
+  T('Quick actions panel', {check:true}),
+  T('Full refresh on open and close', {check:false, hint:'Clears e-ink ghosting, a bit slower'}),
+]});
+
+const GENERAL = (reader) => [
+  T('Frontlight', {act:'Открывает окно подсветки KOReader'}),
+  T('Night mode', {check:false, sep:true}),
+  T('Network', {sub:[T('Wi-Fi connection',{check:true}), T('Wi-Fi network list'), T('Action when Wi-Fi is off', R(['ask','turn on','do nothing'],0)), T('Network info'), T('HTTP proxy',{check:false})]}),
+  T('Screen', {sub:[T('Rotation', R(['portrait','landscape','portrait (upside down)','landscape (upside down)'],0)), T('Screen DPI', R(['auto','custom'],0, {hint:'Scales the interface; Auto uses the device value'})), T('E-ink settings',{sub:[T('Full refresh rate', R(['never','every 6 pages','every 12 pages','every 24 pages'],1)), T('Flash on chapter boundaries',{check:true}), T('Flash buttons and menu items',{check:false})]}), T('Color rendering',{check:false, dis:true})], sep:true}),
+  ...(reader ? [T('Status bar', {sub:[T('Show status bar',{check:true}), T('Items to show',{sub:[T('current time',{check:true}),T('battery',{check:true}),T('pages left in chapter',{check:true}),T('book title',{check:false})]}), T('Alignment', R(['left','center','right'],1))]})] : []),
+  T('Taps and gestures', {sub:[T('Gesture manager'), T('Long-press interval: 1 s',{dialog:1}), T('Ignore accidental taps',{check:true})]}),
+  T('Navigation', {sub:[T('Physical buttons',{sub:[T('Invert page turn buttons',{check:false})]}), T('Enable pagination',{check:true})]}),
+  T('Document', {sub:[T('Auto-save book metadata', R(['never','every 5 min','every 15 min'],1)), T('End of document action', R(['always ask','book status','go to beginning','file browser','do nothing'],0)), T('Highlight action', R(['ask','highlight','translate','wikipedia','dictionary'],0))], sep:true}),
+  T('Language', R(LANGS, 5)),
+  T('Device', {sub:[T('Keyboard',{sub:[T('Keyboard layout', R(['English','Русский','Deutsch'],0)), T('Keyboard font size',{dialog:1})]}), T('Time and date',{sub:[T('12-hour clock',{check:false})]}), T('Power management',{sub:[T('Autosuspend timeout: 15 min',{dialog:1}), T('Autoshutdown timeout: 3 d',{dialog:1})]})]}),
+];
+
+const TOOLS = (reader) => [
+  T('Reading statistics', {sub:[T('Enabled',{check:true}), T('Reading progress',{dis:!reader, act:'Открывает статистику'}), T('Time range',{act:'Открывает статистику'})]}),
+  T('Vocabulary builder', {act:'Открывает Vocabulary builder'}),
+  T('Calibre', {hint:'Wireless transfer from Calibre on your computer', sub:[T('Start wireless connection',{act:'Подключается к Calibre'}), T('Search settings',{sub:[T('Manage libraries')]})]}),
+  T('Export highlights', {sub:[T('Export all notes from this book',{dis:!reader}), T('Export all notes from all books')]}),
+  T('Profiles', {hint:'Saved sets of settings you can switch between', sub:[T('New profile')]}),
+  T('Text editor', {act:'Открывает текстовый редактор'}),
+  T('News downloader', {hint:'Downloads RSS feeds as books', sub:[T('Go to news folder')], sep:true}),
+  T('More tools', {sub:[
+    T('Battery statistics', {act:'Открывает статистику батареи'}),
+    T('Calculator', {act:'Открывает калькулятор'}),
+    DRAWER,
+    T('Plugin management'),
+    T('SSH server', {sub:[T('SSH server',{check:false}), T('SSH port: 2222',{dialog:1}), T('Login without password (DANGEROUS)',{check:false})]}),
+    T('Terminal emulator', {act:'Открывает терминал'}),
+    T('Developer options', {sub:[T('Clear caches'), T('Enable debug logging',{check:false})]}),
+  ]}),
+];
+
+const SEARCH = (reader) => [
+  T('Dictionary lookup', {act:'Открывает поиск по словарю'}),
+  T('Dictionary lookup history'),
+  T('Vocabulary builder', {act:'Открывает Vocabulary builder'}),
+  T('Dictionary settings', {sub:[T('Manage dictionaries'), T('Download dictionaries'), T('Enable fuzzy search',{check:true})], sep:true}),
+  T('Wikipedia lookup', {act:'Открывает поиск по Wikipedia'}),
+  T('Wikipedia history', {dis:true}),
+  T('Wikipedia settings', {sub:[T('Wikipedia languages'), T('Set Wikipedia save as EPUB folder')], sep:true}),
+  ...(reader ? [T('Fulltext search', {act:'Открывает поиск по книге'})] : []),
+  T('Calibre metadata search', {hint:'Finds books by title or author in Calibre libraries'}),
+  T('File search', {sep:true}),
+  T('OPDS catalog', {hint:'Browse and download books from online libraries'}),
+];
+
+const MAIN = (reader) => [
+  T('History'),
+  T('Favorites'),
+  T('Open last document', {sep:true}),
+  ...(reader ? [T('Book information'), T('Book status', {sep:true})] : []),
+  T('Help', {sub:[T('Quickstart guide'), T('Report a bug'), T('Version'), T('About')]}),
+  T('Update', {sub:[T('Check for updates'), T('Settings')], sep:true}),
+  T('Exit', {sub:[T('Exit'), T('Sleep'), T('Restart KOReader'), T('Reboot the device'), T('Power off')]}),
+];
+
+const ICONS = {
+  files:'<path d="M3 6.5h6l2 2h10v10.5H3z"/>',
+  general:'<circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.8 1.8M16.7 16.7l1.8 1.8M5.5 18.5l1.8-1.8M16.7 7.3l1.8-1.8"/><circle cx="12" cy="12" r="6.6"/>',
+  tools:'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+  search:'<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/>',
+  main:'<path d="M4 6.5h16M4 12h16M4 17.5h16"/>',
+  nav:'<path d="M6.5 3.5h11v17l-5.5-4-5.5 4z"/>',
+  typeset:'<path d="M3 18.5 8 5.5l5 13M4.8 14h6.4"/><path d="M20.5 18.5v-6a2.7 2.7 0 0 0-5 -1.2M20.5 15.2c-3.6-.5-5.6.4-5.6 1.9 0 2.2 3.8 2.2 5.6-.4"/>',
+};
+const icon = (k, s=22) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
+const CHEV = '<svg width="9" height="15" viewBox="0 0 9 15"><path d="M1.5 1.5 7.5 7.5 1.5 13.5" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round"/></svg>';
+
+const CTX = {
+  fm: [
+    {key:'files', title:'Files', items:[
+      T('Display mode', R(['classic (filename only)','mosaic with cover images','list with cover images and metadata','list with metadata, no images','list with cover images and filenames'],2)),
+      T('File browser settings', {sub:[T('Show hidden files',{check:false}), T('Show unsupported files',{check:false}), T('Show finished books',{check:true, sep:true}), T('Classic mode settings',{sub:[T('Items per page: 14',{dialog:1}), T('Item font size: 18',{dialog:1}), T('Shrink item font size to fit more text',{check:true})]}), T('History settings',{sub:[T('Show filename in history',{check:false})]}), T('Home folder settings',{sub:[T('Set home folder'), T('Lock home folder',{check:false})]})], sep:true}),
+      T('Sort by: name', R(['name','name (natural sorting)','last read date','date added','date modified','size','type','percent – unread first'],0)),
+      T('Reverse sorting', {check:false}),
+      T('Folders and files mixed', {check:false, hint:'Folders are sorted together with books', sep:true}),
+      T('Start with', R(['file browser','history','favorites','folder shortcuts','last file'],0, {hint:'Screen shown when KOReader starts'})),
+    ]},
+    {key:'general', title:'General', items:GENERAL(false)},
+    {key:'tools', title:'Tools', items:TOOLS(false)},
+    {key:'search', title:'Search', items:SEARCH(false)},
+    {key:'main', title:'KOReader', items:MAIN(false)},
+  ],
+  rd: [
+    {key:'nav', title:'Navigation', items:[
+      T('Table of contents', {act:'Открывает оглавление'}), T('Bookmarks', {act:'Открывает закладки'}), T('Page browser', {act:'Открывает Page browser'}), T('Book map', {sep:true, act:'Открывает Book map'}),
+      T('Go to page', {act:'Открывает ввод номера страницы'}), T('Skim document', {act:'Открывает Skim document'}), T('Go back to previous location', {dis:true, sep:true}),
+      T('Links', {sub:[T('Tap to follow links',{check:true}), T('Show footnotes in popup',{check:true})]}),
+      T('Page overlap', {hint:'Marks the part of the previous page after turning', sub:[T('Enable',{check:false})]}),
+    ]},
+    {key:'typeset', title:'Typesetting', items:[
+      T('Font', R(FONTS, 6)),
+      T('Font settings', {sub:[T('Fallback fonts'), T('Font size: 22',{dialog:1})], sep:true}),
+      T('Style tweaks', {hint:'Overrides book styles: indents, footnotes, images', sub:[T('Paragraphs',{sub:[T('Ignore publisher indentation',{check:false}), T('Justify all elements',{check:true})]}), T('Footnotes and endnotes',{sub:[T('In-page footnotes',{check:true})]})]}),
+      T('Hyphenation', R(['left/right minimum: 2/2','language-based','algorithm','none'],1)),
+      T('Typography rules', R(['English','Русский','Deutsch','Français'],1, {hint:'Language rules for hyphenation and line breaks'})),
+      T('Floating punctuation', {check:true, hint:'Hangs punctuation into the margins'}),
+      T('Set render mode', R(['legacy','flat','book','web'],2, {hint:'How closely the layout follows the book CSS'})),
+    ]},
+    {key:'general', title:'General', items:GENERAL(true)},
+    {key:'tools', title:'Tools', items:TOOLS(true)},
+    {key:'search', title:'Search', items:SEARCH(true)},
+    {key:'files', title:'Files', act:'Закрывает книгу и открывает файловый менеджер'},
+    {key:'main', title:'KOReader', items:MAIN(true)},
+  ],
+};
+
+const S = {ctx:'fm', open:true, stack:[], pop:false};
+const scr = document.getElementById('scr');
+const H = {status:30, title:48, row:56, row2:68, sep:11};
+const VIEW_TOP = H.status + H.title + 1, VIEW_H = 560 - VIEW_TOP;
+
+// Display-only capitalization: KOReader strings stay untouched.
+// "name" → "Name"; "eReader", "iPhone" stay as they are.
+function ucfirst(s){
+  if (!s) return s;
+  const [a, b] = [...s];
+  if (a.toLowerCase() === a && a.toUpperCase() !== a && !(b && b.toUpperCase() === b && b.toLowerCase() !== b)) return a.toUpperCase() + s.slice(a.length);
+  return s;
+}
+function split(t){ const m = t.match(/^(.*?):\s(.+)$/); return m ? [m[1], m[2]] : [t, null]; }
+function label(it){ return ucfirst(split(it.t)[0]); }
+function value(it){ return ucfirst(it.radio ? it.radio[it.sel] : split(it.t)[1]); }
+function tabs(){ return CTX[S.ctx]; }
+function reset(){ S.pop = false; S.stack = [{root:true, title:'Settings', offset:0}]; }
+function current(){ return S.stack[S.stack.length-1]; }
+function push(title, items){ S.stack.push({title, items, offset:0}); }
+function radioPage(it){ return it.radio.map(o => ({t:o, radioParent:it})); }
+
+function layout(entry){
+  const rows = [];
+  if (entry.root) tabs().forEach((tb, i) => rows.push({kind:'tab', i, h:H.row}));
+  else entry.items.forEach((it, i) => {
+    rows.push({kind: it.radioParent ? 'radio' : 'item', i, h: it.hint ? H.row2 : H.row});
+    if (it.sep && i < entry.items.length - 1) rows.push({kind:'sep', h:H.sep});
+  });
+  let y = 0;
+  rows.forEach(r => { r.y = y; y += r.h; });
+  const max = Math.max(0, y - VIEW_H);
+  // Snap points: every row top, plus the very end so the last row sits on the bottom edge.
+  const snaps = [...new Set(rows.map(r => Math.min(r.y, max)).concat(max))].sort((a, b) => a - b);
+  return {rows, total:y, max, snaps};
+}
+
+function statusBar(){
+  return `<div class="status"><span>16:42</span>
+    <span class="handle" data-a="handle"><svg width="44" height="10" viewBox="0 0 44 10"><path d="M3 2.5 22 7.5 41 2.5" fill="none" stroke="#111" stroke-width="2.4" stroke-linecap="round"/></svg></span>
+    <span class="r"><svg width="16" height="12" viewBox="0 0 16 12" fill="none" stroke="#111" stroke-width="1.6" stroke-linecap="round"><path d="M1.5 4.2a9.5 9.5 0 0 1 13 0M4 6.9a6 6 0 0 1 8 0"/><circle cx="8" cy="9.8" r="1" fill="#111" stroke="none"/></svg>67%
+    <svg width="22" height="11" viewBox="0 0 22 11"><rect x=".75" y=".75" width="18.5" height="9.5" rx="1.5" fill="none" stroke="#111" stroke-width="1.5"/><rect x="2.6" y="2.6" width="10.5" height="5.8" fill="#111"/><rect x="20" y="3.5" width="1.6" height="4" fill="#111"/></svg></span></div>`;
+}
+
+let L = null; // layout of the current page
+function render(){
+  stopAnim();
+  if (!S.open){
+    scr.innerHTML = statusBar() + `<div class="bg"><div class="hint" data-a="reopen">Коснитесь, чтобы открыть меню</div>` +
+      (S.ctx === 'fm'
+        ? `<div class="fm"><div>books/<span>42 ▫</span></div><div>screens/<span>0 ▫</span></div><div>system/<span>24 ▫</span></div></div>`
+        : `<div class="book">It was a bright cold day in April, and the clocks were striking thirteen. Winston Smith, his chin nuzzled into his breast in an effort to escape the vile wind, slipped quickly through the glass doors of Victory Mansions, though not quickly enough to prevent a swirl of gritty dust from entering along with him.</div>`) + `</div>`;
+    return;
+  }
+  const e = current(), depth = S.stack.length - 1;
+  L = layout(e);
+  e.offset = Math.min(Math.max(e.offset, 0), L.max);
+  let h = statusBar();
+  h += `<div class="titlebar">${depth ? `<div class="ib back" data-a="back"><svg width="22" height="18" viewBox="0 0 22 18"><path d="M20 9H3M9.5 2 2.5 9l7 7" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>` : ''}
+    <div class="ttl">${e.title}</div>
+    <div class="ib" data-a="more"><svg width="4" height="18" viewBox="0 0 4 18"><circle cx="2" cy="2" r="2"/><circle cx="2" cy="9" r="2"/><circle cx="2" cy="16" r="2"/></svg></div>
+    <div class="ib" data-a="close"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M2 2l14 14M16 2 2 16" stroke="#111" stroke-width="2" stroke-linecap="round"/></svg></div></div>`;
+  h += `<div class="vp ${L.max > 0 ? 'scroll' : ''}" id="vp" style="top:${VIEW_TOP}px"><div class="content" id="content">`;
+  L.rows.forEach((r, k) => {
+    const nextSep = L.rows[k+1] && L.rows[k+1].kind === 'sep';
+    if (r.kind === 'sep'){ h += `<div class="gsep" style="height:${r.h}px"></div>`; return; }
+    if (r.kind === 'tab'){
+      const tb = tabs()[r.i];
+      h += `<div class="row" style="height:${r.h}px" data-a="opentab" data-i="${r.i}"><span class="ico">${icon(tb.key)}</span>
+        <div class="txt"><div class="lbl">${tb.title}</div></div>${tb.act ? '' : `<span class="chev">${CHEV}</span>`}</div>`;
+      return;
+    }
+    const it = e.items[r.i];
+    if (r.kind === 'radio'){
+      const on = it.radioParent.sel === it.radioParent.radio.indexOf(it.t);
+      h += `<div class="row ${nextSep ? 'nodiv' : ''}" style="height:${r.h}px" data-a="radio" data-i="${r.i}"><span class="radio ${on ? 'on' : ''}"></span><div class="txt"><div class="lbl" style="font-weight:${on ? 700 : 500}">${ucfirst(it.t)}</div></div></div>`;
+      return;
+    }
+    const v = value(it);
+    let right = '';
+    if (it.check !== undefined) right = `<span class="sw ${it.check ? 'on' : ''}"></span>`;
+    else {
+      if (v) right += `<span class="val">${v}</span>`;
+      if (it.sub || it.radio || it.dialog) right += `<span class="chev">${CHEV}</span>`;
+    }
+    h += `<div class="row ${it.dis ? 'dis' : ''} ${nextSep ? 'nodiv' : ''}" style="height:${r.h}px" data-a="item" data-i="${r.i}"><div class="txt"><div class="lbl">${label(it)}</div>${it.hint ? `<div class="sub">${it.hint}</div>` : ''}</div>${it.dis ? '' : right}</div>`;
+  });
+  h += `</div></div>`;
+  if (L.max > 0){
+    h += `<div class="sbar" style="top:${VIEW_TOP + 6}px;bottom:8px"><div class="arr" id="up" data-a="prev">▲</div>
+      <div class="track" id="track"><div class="thumb" id="thumb"></div></div><div class="arr" id="down" data-a="next">▼</div></div>`;
+  }
+  if (S.pop) h += `<div class="pop"><div data-a="classic">Classic KOReader menu</div><div data-a="drawer">Kindle Drawer settings</div></div>`;
+  h += `<div class="toast" id="toast"></div>`;
+  scr.innerHTML = h;
+  applyOffset(e.offset);
+  bindScroll();
+}
+
+// ---------- scrolling ----------
+function applyOffset(y){
+  const e = current();
+  e.offset = y;
+  document.getElementById('content').style.transform = `translateY(${-y}px)`;
+  const thumb = document.getElementById('thumb');
+  if (!thumb) return;
+  const trackH = document.getElementById('track').clientHeight;
+  const th = Math.max(24, trackH * VIEW_H / L.total);
+  thumb.style.height = th + 'px';
+  thumb.style.top = (L.max ? y / L.max : 0) * (trackH - th) + 'px';
+  document.getElementById('up').classList.toggle('off', y <= 0);
+  document.getElementById('down').classList.toggle('off', y >= L.max);
+}
+const clamp = y => Math.min(Math.max(y, 0), L.max);
+function nearestSnap(y){
+  y = clamp(y);
+  return L.snaps.reduce((best, s) => Math.abs(s - y) < Math.abs(best - y) ? s : best, 0);
+}
+let anim = null;
+function stopAnim(){ if (anim) cancelAnimationFrame(anim.raf); anim = null; }
+function animateTo(target, dur){
+  stopAnim();
+  const from = current().offset, t0 = performance.now();
+  if (Math.abs(target - from) < 0.5){ applyOffset(target); return; }
+  const step = now => {
+    const p = Math.min(1, (now - t0) / dur), k = 1 - Math.pow(1 - p, 3);
+    applyOffset(from + (target - from) * k);
+    if (p < 1) anim = {raf: requestAnimationFrame(step)}; else anim = null;
+  };
+  anim = {raf: requestAnimationFrame(step)};
+}
+function scrollBy(dy){ animateTo(nearestSnap(current().offset + dy), 220); }
+
+let drag = null, suppressUntil = 0, wheelTimer = null;
+function bindScroll(){
+  const vp = document.getElementById('vp');
+  vp.addEventListener('pointerdown', ev => {
+    stopAnim();
+    drag = {y0: ev.clientY, off0: current().offset, moving: false, samples: [{t: performance.now(), y: ev.clientY}], row: ev.target.closest('.row')};
+    if (drag.row && !drag.row.classList.contains('dis')) drag.row.classList.add('press');
+  });
+  vp.addEventListener('pointermove', ev => {
+    if (!drag) return;
+    const dy = ev.clientY - drag.y0;
+    if (!drag.moving && Math.abs(dy) > 6){
+      drag.moving = true;
+      if (drag.row) drag.row.classList.remove('press');
+      // Capture only once it is a drag: a captured tap would click the list, not the row.
+      try { vp.setPointerCapture(ev.pointerId); } catch (_) {}
+    }
+    if (!drag.moving) return;
+    applyOffset(clamp(drag.off0 - dy));
+    const now = performance.now();
+    drag.samples.push({t: now, y: ev.clientY});
+    while (drag.samples.length > 2 && now - drag.samples[0].t > 100) drag.samples.shift();
+  });
+  vp.addEventListener('pointerup', ev => {
+    if (!drag) return;
+    const d = drag; drag = null;
+    if (d.row) d.row.classList.remove('press');
+    if (!d.moving) return;
+    suppressUntil = performance.now() + 60; // the click that ends a drag is not a tap
+    const a = d.samples[0], b = d.samples[d.samples.length - 1];
+    // A finger that stopped before lifting gives no momentum.
+    const v = b.t > a.t && performance.now() - b.t < 80 ? (b.y - a.y) / (b.t - a.t) : 0; // px per ms
+    const fling = Math.abs(v) > 0.4 ? -v * 320 : 0; // momentum distance
+    animateTo(nearestSnap(current().offset + fling), 180 + Math.min(Math.abs(v) * 90, 220));
+  });
+  vp.addEventListener('pointercancel', () => { if (drag && drag.row) drag.row.classList.remove('press'); drag = null; });
+  vp.addEventListener('pointerleave', () => { if (drag && !drag.moving){ if (drag.row) drag.row.classList.remove('press'); drag = null; } });
+  vp.addEventListener('wheel', ev => {
+    ev.preventDefault(); stopAnim();
+    applyOffset(clamp(current().offset + ev.deltaY));
+    clearTimeout(wheelTimer);
+    wheelTimer = setTimeout(() => animateTo(nearestSnap(current().offset), 140), 120);
+  }, {passive:false});
+}
+
+// ---------- taps ----------
+let toastTimer;
+function toast(msg){
+  const t = document.getElementById('toast'); if (!t) return;
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1900);
+}
+scr.addEventListener('click', ev => {
+  if (performance.now() < suppressUntil) return;
+  const el = ev.target.closest('[data-a]');
+  const a = el && el.dataset.a, i = el ? +el.dataset.i : -1;
+  if (S.pop && a !== 'more'){
+    S.pop = false;
+    if (a === 'classic'){ render(); toast('Открывает штатное меню KOReader с вкладками'); return; }
+    if (a === 'drawer'){
+      const tb = tabs(), tools = tb.find(t => t.key === 'tools');
+      const more = tools.items.find(x => x.t === 'More tools');
+      reset(); push('Tools', tools.items); push('More tools', more.sub); push('Kindle Drawer', DRAWER.sub); render(); return;
+    }
+    render(); return;
+  }
+  if (!a) return;
+  const e = current();
+  switch (a){
+    case 'handle': toast('Открывает верхнюю шторку Kindle Drawer'); break;
+    case 'more': S.pop = !S.pop; render(); break;
+    case 'close': S.open = false; render(); break;
+    case 'reopen': S.open = true; reset(); render(); break;
+    case 'back': S.stack.pop(); S.pop = false; render(); break;
+    case 'prev': scrollBy(-(VIEW_H - H.row)); break;
+    case 'next': scrollBy(VIEW_H - H.row); break;
+    case 'opentab': {
+      const tb = tabs()[i];
+      if (tb.act){ toast(tb.act); break; }
+      push(tb.title, tb.items); render(); break;
+    }
+    case 'radio': { const it = e.items[i]; it.radioParent.sel = it.radioParent.radio.indexOf(it.t); render(); break; }
+    case 'item': {
+      const it = e.items[i];
+      if (it.dis) break;
+      if (it.check !== undefined){ it.check = !it.check; render(); }
+      else if (it.sub) { push(label(it), it.sub); render(); }
+      else if (it.radio) { push(label(it), radioPage(it)); render(); }
+      else if (it.dialog) toast('Открывает окно ввода значения KOReader');
+      else toast(it.act || 'Выполняет действие KOReader');
+      break;
+    }
+  }
+});
+
+const ctxBox = document.getElementById('ctx');
+ctxBox.addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  ctxBox.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  S.ctx = b.dataset.v; S.open = true; reset(); render();
+});
+reset(); render();
+</script>
+</body>
+</html>
