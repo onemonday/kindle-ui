@@ -16,6 +16,19 @@ local source = debug.getinfo(1, "S").source:sub(2)
 local icon_dir = source:match("(.*/)") .. "icons/"
 local Drawer = InputContainer:extend{ modal = true, covers_header = true }
 
+-- Face for a size in design units at the given scale. Layout uses physical
+-- pixels and getFace applies DPI scaling itself, so divide it back out.
+function Drawer.face(size, scale)
+    return Font:getFace("cfont", size * scale / (Screen:scaleBySize(1000) / 1000))
+end
+
+-- Battery level as a whole percent 0-100, or nil when the device reports none.
+function Drawer.batteryCapacity(power)
+    local capacity = tonumber(power:getCapacity())
+    if not capacity or capacity ~= capacity then return nil end
+    return math.max(0, math.min(100, math.floor(capacity + 0.5)))
+end
+
 function Drawer:init()
     self.dimen = Screen:getSize()
     self.power = Device:getPowerDevice()
@@ -60,8 +73,7 @@ function Drawer:refresh()
 end
 
 function Drawer:text(bb, value, x, y, size, centered, bold, max_width, vertically_centered)
-    -- Layout uses physical pixels; getFace applies DPI scaling internally.
-    local widget = TextWidget:new{ text = value, face = Font:getFace("cfont", size * self.scale / (Screen:scaleBySize(1000) / 1000)),
+    local widget = TextWidget:new{ text = value, face = Drawer.face(size, self.scale),
         bold = bold, padding = 0, lang = L10n.language(), para_direction_rtl = false,
         max_width = math.floor((max_width or (centered and 235 or 600)) * self.scale) }
     local width = widget:getSize().w
@@ -91,16 +103,11 @@ end
 
 -- Draw battery as UI primitives, so it follows the screen's night-mode inversion.
 function Drawer:paintBattery(bb, align_to_text)
-    local capacity = tonumber(self.power:getCapacity())
-    if capacity and capacity == capacity then
-        capacity = math.max(0, math.min(100, math.floor(capacity + 0.5)))
-    else
-        capacity = nil
-    end
+    local capacity = Drawer.batteryCapacity(self.power)
     self:text(bb, capacity and (capacity .. "%") or "—", 660, 20, 22, true, false, 80)
     local icon_y_offset = 0
     if align_to_text then
-        local measure = TextWidget:new{ text = "100%", face = Font:getFace("cfont", 22 * self.scale / (Screen:scaleBySize(1000) / 1000)), padding = 0 }
+        local measure = TextWidget:new{ text = "100%", face = Drawer.face(22, self.scale), padding = 0 }
         icon_y_offset = 20 + measure:getSize().h / self.scale / 2 - 33
         measure:free()
     end
