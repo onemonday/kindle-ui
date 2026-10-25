@@ -36,6 +36,8 @@ local ru = {
     ["Open a book and enable KOSync."] = "Откройте книгу и включите KOSync.",
     ["Enable the SSH plugin in KOReader first."] = "Сначала включите SSH-плагин в KOReader.",
     ["SSH server is already running."] = "SSH-сервер уже запущен.",
+    ["Scanning for networks…"] = "Поиск сетей…",
+    ["This device cannot list Wi-Fi networks."] = "Это устройство не показывает список сетей Wi-Fi.",
 }
 local M = {}
 function M.language()

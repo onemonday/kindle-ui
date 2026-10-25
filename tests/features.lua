@@ -159,3 +159,51 @@ for _,level in ipairs({0,7,21,24}) do
 end
 d.text=text; d.icon=icon; q:onCloseWidget()
 print("PASS: all 25 warmth levels round-trip, +/- steps, moving labels at endpoints and intermediate values")
+
+-- Holding a button opens its own settings instead of toggling it.
+G_reader_settings.data={kindle_drawer={hidden={ssh=false}}}; device.wifi=true; device.frontlight=true
+function manager:forceRePaint() end
+local lights=0; function device:showLightDialog() lights=lights+1 end
+package.preload["ui/widget/networksetting"]=function() return Base end
+local h=Plugin:new{ui=newUI()}; h.ui.SSH={isRunning=function() return false end}
+local menu=h.ui.menu
+local sync_item={id="progress_sync",text="Progress sync",sub_item_table={{text="Server"}}}
+local ssh_item={id="ssh",text="SSH server",sub_item_table={{text="Port"}}}
+local more_tools={id="more_tools",text="More tools",sub_item_table={{text="Other"},ssh_item}}
+-- Like MenuSorter: placed items leave menu_items and carry their key as id.
+menu.menu_items={}
+function menu:setUpdateItemTable() self.tab_item_table={{{text="Settings"}},{sync_item,more_tools}} end
+function menu:onShowMenu(tab,do_not_show)
+ self.shown_tab=tab; self.selected={}
+ local touch={}; function touch.onMenuSelect(_,item) self.selected[#self.selected+1]=item end
+ self.menu_container={touch}
+ if not do_not_show then manager:show(self.menu_container) end
+end
+local function hold(id)
+ h:onKindleDrawer(); local d=h.drawer
+ for _,t in ipairs(d.targets) do if t.button.id==id then
+  d:onDrawer_hold(nil,{pos={x=d.offset+t.x*d.scale,y=t.y*d.scale}}); return
+ end end
+ error("no button "..id)
+end
+network.on=true; local toggled=false
+network.toggleWifiOff=function() toggled=true end
+network.getNetworkList=function() return {{ssid="a",signal_quality=6},{ssid="b",signal_quality=81}} end
+hold("wifi"); assert(not h.drawer and network.on and not toggled)
+assert(manager.shown.network_list[1].ssid=="b", "strongest network first")
+network.getNetworkList=function() return nil end
+hold("wifi"); assert(manager.shown.text=="This device cannot list Wi-Fi networks.")
+network.on=false; local long_press
+network.toggleWifiOn=function(_,_,lp,interactive) long_press=lp and interactive; network.on=true end
+hold("wifi"); assert(long_press==true, "Wi-Fi off uses KOReader's long-press scan")
+hold("light"); assert(lights==1 and not h.drawer and power.intensity>0)
+hold("sync"); assert(menu.shown_tab==2 and #menu.selected==1 and menu.selected[1]==sync_item)
+assert(manager.shown==menu.menu_container and not h.drawer)
+hold("ssh"); assert(menu.shown_tab==2 and menu.selected[1]==more_tools and menu.selected[2]==ssh_item)
+local night=G_reader_settings.data.night_mode; local events=#h.ui.events
+hold("night"); assert(h.drawer and #h.ui.events==events and G_reader_settings.data.night_mode==night)
+h:closeDrawer(); ssh_item.id=nil
+hold("ssh"); assert(menu.shown_tab==nil and manager.shown==menu.menu_container, "missing item falls back to menu")
+manager.shown=nil; hold("settings"); assert(manager.shown==menu.menu_container and not h.drawer)
+h:onCloseWidget()
+print("PASS: hold opens network list, light dialog, KOSync/SSH submenus; Dark Mode ignores hold")
