@@ -12,7 +12,6 @@ local UIManager = require("ui/uimanager")
 local Event = require("ui/event")
 local NetworkMgr = require("ui/network/manager")
 local datetime = require("datetime")
-local time = require("ui/time")
 local Drawer = require("drawer")
 local Items = require("menuitems")
 local L10n = require("l10n")
@@ -43,9 +42,9 @@ local CHEVRON_COL = 9 + 14 -- chevron icon + gap
 local SWITCH_COL = 46 + 12 -- switch + gap
 local SCROLLBAR_COL = 46
 local POP_W, POP_ITEM = 236, 44
-local FLING_MS, PAN_MS = 320, 80
+-- A vertical stroke shorter than this is not a page turn.
+local SWIPE_MIN = 24
 local DESIGN_W, DESIGN_H = 512, 683
-local WHEEL_ROWS = 3
 local SEARCH_DEPTH = 8
 
 local M = InputContainer:extend{
@@ -129,11 +128,6 @@ function M:init()
     self:updateItems()
 end
 
-function M:now(ges)
-    if ges and ges.time then return time.to_ms(ges.time) end
-    return time.to_ms(time.now())
-end
-
 ------------------------------------------------------------------------------
 -- Rows and scrolling
 
@@ -172,31 +166,30 @@ function M:layout()
     freeRowTexts(self.rows)
     self.rows, self.total = rows, y
     self.max = math.max(0, y - self.view_h)
-    -- Snap points: every row top, plus the end so the last row sits on the bottom edge.
-    local seen, snaps = { [0] = true, [self.max] = true }, { 0, self.max }
-    for _, row in ipairs(rows) do
-        local s = math.min(row.y, self.max)
-        if row.kind ~= "sep" and not seen[s] then seen[s] = true; snaps[#snaps + 1] = s end
+    -- Pages as on Kindle: each starts at the first row the previous one cut off
+    -- (with its group caption), the last one ends on the last row, so it is full.
+    local pages, top = { 0 }, 0
+    for i, row in ipairs(rows) do
+        if top >= self.max then break end
+        if row.kind ~= "sep" and row.y > top and row.y + row.h > top + self.view_h then
+            local prev = rows[i - 1]
+            local start = prev and prev.kind == "caption" and prev.y > top and prev.y or row.y
+            top = math.min(start, self.max)
+            pages[#pages + 1] = top
+        end
     end
-    table.sort(snaps)
-    self.snaps = snaps
+    self.pages = pages
 end
 
-function M:clamp(y) return math.max(0, math.min(self.max, y)) end
-function M:nearestSnap(y)
-    y = self:clamp(y)
-    local best = 0
-    for _, s in ipairs(self.snaps) do
-        if math.abs(s - y) < math.abs(best - y) then best = s end
+-- Page that shows content offset y.
+function M:pageAt(y)
+    local index = 1
+    for i, top in ipairs(self.pages) do
+        if top <= y then index = i end
     end
-    return best
+    return index
 end
-function M:pageStep() return math.max(ROW, self.view_h - ROW) end
-function M:pageCount() return self.max > 0 and math.ceil(self.max / self:pageStep()) + 1 or 1 end
-function M:currentPage()
-    if self.offset >= self.max then return self:pageCount() end
-    return math.floor(self.offset / self:pageStep()) + 1
-end
+function M:pageCount() return #self.pages end
 function M:depth() return self.at_root and 0 or #self.item_table_stack + 1 end
 function M:padRight() return self.max > 0 and PAD_R_SCROLL or PAD_R end
 
@@ -206,19 +199,15 @@ function M:updateItems(target_page, target_item_id, offset)
     local depth = self:depth()
     for d = #self.titles, depth + 1, -1 do self.titles[d] = nil; self.offsets[d] = nil end
     self:layout()
-    if offset then
-        self.offset = offset
-    elseif target_item_id ~= nil then
+    -- Without a target the page stays; a callback may have set touchmenu_instance.page.
+    local page = target_page or offset and self:pageAt(offset) or self.page
+    if target_item_id ~= nil then
         for _, row in ipairs(self.rows) do
-            if row.item and row.item.menu_item_id == target_item_id then self.offset = row.y; break end
+            if row.item and row.item.menu_item_id == target_item_id then page = self:pageAt(row.y); break end
         end
-    elseif target_page then
-        self.offset = (target_page - 1) * self:pageStep()
-    elseif self.page ~= self:currentPage() then -- a callback set touchmenu_instance.page
-        self.offset = (self.page - 1) * self:pageStep()
     end
-    self.offset = self:nearestSnap(self.offset)
-    self.page = self:currentPage()
+    self.page = math.max(1, math.min(#self.pages, page))
+    self.offset = self.pages[self.page]
     self.drag = nil
     UIManager:setDirty(self, "ui", self.dimen)
 end
@@ -227,15 +216,14 @@ function M:listRegion()
     local top = math.floor(VIEW_TOP * self.scale)
     return Geom:new{ x = 0, y = top, w = self.dimen.w, h = self.dimen.h - top }
 end
-function M:scrollTo(y)
-    self:cancelPanTimer()
-    self.offset = self:nearestSnap(y)
-    self.page = self:currentPage()
+function M:showPage(page)
+    page = math.max(1, math.min(#self.pages, page))
+    if page == self.page then return end
+    self.page, self.offset = page, self.pages[page]
     UIManager:setDirty(self, "ui", self:listRegion())
 end
 function M:scrollPage(direction)
-    if self.max <= 0 then return true end
-    self:scrollTo(self.offset + direction * self:pageStep())
+    self:showPage(self.page + direction)
     return true
 end
 function M:onNextPage() return self:scrollPage(1) end
@@ -280,7 +268,6 @@ function M:pushPage(item, sub_item_table)
     Items.itemId(item)
     self.titles[depth + 1] = self:describe(item).label
     self.item_table = sub_item_table
-    self.offset = 0
     self:updateItems(1, sub_item_table.open_on_menu_item_id_func and sub_item_table.open_on_menu_item_id_func())
 end
 
@@ -496,7 +483,7 @@ function M:text(bb, value, x, y, size, opts)
 end
 
 -- Row texts keep their widget until layout() replaces the rows: text, size, style
--- and width do not change in between, and panning repaints rows every PAN_MS.
+-- and width do not change in between.
 function M:rowText(bb, row, key, value, x, y, size, opts)
     row.texts = row.texts or {}
     local widget = row.texts[key]
@@ -561,7 +548,8 @@ function M:paintTitle(bb)
         self:icon(bb, "menu-back", 24, cy, 22, 18)
         x = 44
     end
-    self:text(bb, self:title(), x, cy, 16, { bold = true, max_width = W - 86 - x - 8 })
+    self:text(bb, self:title(), x, cy, 16, { bold = true, max_width = W - 126 - x - 8 })
+    self:icon(bb, "menu-search", W - 106, cy, 22)
     self:icon(bb, "menu-more", W - 66, cy, 4, 18)
     self:icon(bb, "menu-close", W - 26, cy, 18)
     self:rect(bb, 0, VIEW_TOP - 1, W, 1, c_border)
@@ -723,6 +711,7 @@ function M:onKMenu_tap(_, ges)
     end
     if uy < VIEW_TOP then
         if ux < 48 and not self.at_root then self:backToUpperMenu(true)
+        elseif ux >= W - 126 and ux < W - 86 then self:onShowMenuSearch()
         elseif ux >= W - 86 and ux < W - 46 then
             self.popup = true
             UIManager:setDirty(self, "ui", self.dimen)
@@ -763,102 +752,61 @@ function M:onKMenu_hold(_, ges)
     return true
 end
 
-function M:cancelPanTimer()
-    if self.pan_timer then UIManager:unschedule(self.pan_timer); self.pan_timer = nil end
-end
-
--- E-ink: fast refresh of the list region only, at most every PAN_MS.
-function M:panRepaint()
-    local now = self:now()
-    if not self.last_pan_paint or now - self.last_pan_paint >= PAN_MS then
-        self.last_pan_paint, self.pan_painted = now, self.offset
-        UIManager:setDirty(self, "fast", self:listRegion())
-    elseif not self.pan_timer then
-        self.pan_timer = function()
-            self.pan_timer = nil
-            if self.drag and self.offset ~= self.pan_painted then self:panRepaint() end
-        end
-        UIManager:scheduleIn((PAN_MS - (now - self.last_pan_paint)) / 1000, self.pan_timer)
-    end
-end
-
+-- Kindle turns a whole page per stroke; the list does not follow the finger.
 function M:onKMenu_pan(_, ges)
     if self.popup then return true end
     if self.drag == nil then
         local start = ges.start_pos or ges.pos
-        local rel = ges.relative
-        local vertical = rel and math.abs(rel.y) >= math.abs(rel.x)
-            or (ges.direction == "north" or ges.direction == "south")
-        if start and start.y / self.scale >= VIEW_TOP and self.max > 0 and vertical then
-            self.drag = { start_y = start.y, offset = self.offset, samples = {} }
-        else
-            self.drag = false
-        end
-    end
-    local drag = self.drag
-    if drag then
-        self.offset = self:clamp(drag.offset - (ges.pos.y - drag.start_y) / self.scale)
-        local t = self:now(ges)
-        drag.samples[#drag.samples + 1] = { t = t, y = ges.pos.y }
-        while #drag.samples > 2 and t - drag.samples[1].t > 100 do table.remove(drag.samples, 1) end
-        self:panRepaint()
+        self.drag = start and start.y / self.scale >= VIEW_TOP and { x = start.x, y = start.y } or false
     end
     return true
 end
 
--- Settle the drag in progress at finger position y (screen px, may be nil):
--- momentum from the last samples, then snap. Returns false when there was none.
-function M:endDrag(ges, y)
+-- Finish the stroke in progress at end_pos (screen px, may be nil). Returns false when there was none.
+function M:endDrag(end_pos)
     local drag = self.drag
     self.drag = nil
     if not drag then return false end
-    local t = self:now(ges)
-    if y then self.offset = self:clamp(drag.offset - (y - drag.start_y) / self.scale) end
-    local a, b = drag.samples[1], drag.samples[#drag.samples]
-    local v = 0 -- units per ms
-    if a and b and b.t > a.t and t - b.t < PAN_MS then v = (b.y - a.y) / (b.t - a.t) / self.scale end
-    local fling = math.abs(v) > 0.4 and -v * FLING_MS or 0
-    self.last_pan_paint = nil
-    self:scrollTo(self.offset + fling)
+    if end_pos then
+        local dx, dy = end_pos.x - drag.x, end_pos.y - drag.y
+        if math.abs(dy) >= math.abs(dx) and math.abs(dy) / self.scale >= SWIPE_MIN then
+            self:scrollPage(dy < 0 and 1 or -1)
+        end
+    end
     return true
 end
 
 function M:onKMenu_pan_release(_, ges)
-    self:endDrag(ges, ges.pos and ges.pos.y)
+    self:endDrag(ges.pos)
     return true
 end
 
 function M:onKMenu_swipe(_, ges)
     if self.popup then self.drag = nil; self:closePopup(); return true end
-    -- Fast drags end as swipe instead of pan_release.
-    if self:endDrag(ges, ges.end_pos and ges.end_pos.y) then return true end
-    local start = ges.pos
-    if start.y / self.scale < VIEW_TOP then
+    self.drag = nil
+    if ges.pos.y / self.scale < VIEW_TOP then
         if ges.direction == "south" and self.owner.settings.enabled ~= false then self.owner:onKindleDrawer()
         elseif ges.direction == "north" then self:closeMenu() end
         return true
     end
     if ges.direction == "east" then
         self:backToUpperMenu(true)
-    elseif (ges.direction == "north" or ges.direction == "south") and self.max > 0 then
-        -- A flick without pan events: no samples, assume a typical 150 ms stroke.
-        local travel = ges.end_pos and (ges.end_pos.y - start.y) / self.scale
-            or (ges.direction == "north" and -1 or 1) * (ges.distance or 0) / self.scale
-        self:scrollTo(self.offset - travel - travel / 150 * FLING_MS)
+    elseif ges.direction == "north" or ges.direction == "south" then
+        self:scrollPage(ges.direction == "north" and 1 or -1)
     end
     return true
 end
 
--- A drag that turns ends as multiswipe: settle it like a release.
+-- A stroke that turns ends as multiswipe: settle it like a release.
 function M:onKMenu_multiswipe(_, ges)
-    self:endDrag(ges, ges and ges.end_pos and ges.end_pos.y)
+    self:endDrag(ges and ges.end_pos)
     return true
 end
 
 -- Mouse wheel in the SDL emulator arrives as a Pan event (TouchMenu:onPan).
 function M:onPan(_, ges)
-    if ges and ges.mousewheel_direction and self.max > 0 and not self.popup then
-        self:scrollTo(self.offset + (ges.direction == "north" and 1 or -1) * WHEEL_ROWS * ROW)
+    if ges and ges.mousewheel_direction and not self.popup then
+        self:scrollPage(ges.direction == "north" and 1 or -1)
     end
     return true
 end
@@ -866,7 +814,6 @@ end
 function M:onCloseWidget()
     if self.closed then return end
     self.closed = true
-    self:cancelPanTimer()
     for _, image in pairs(self.images) do image:free() end
     self.images = {}
     freeRowTexts(self.rows)

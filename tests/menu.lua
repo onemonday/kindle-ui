@@ -170,7 +170,7 @@ local function holdAt(index)
  return m:onKMenu_hold(nil,{pos={x=100*m.scale,y=(79+row.y-m.offset+20)*m.scale}})
 end
 local function tapLabel(label,ux) local i=rowOf(label); local row=m.rows[i]
- if 79+row.y-m.offset+row.h>m.H or row.y<m.offset then m:scrollTo(row.y) end
+ if 79+row.y-m.offset+row.h>m.H or row.y<m.offset then m:showPage(m:pageAt(row.y)) end
  return tapAt(i,ux) end
 
 -- Library: captions, KOReader rows, our View container
@@ -211,7 +211,7 @@ m:onBack(); assert(m.at_root)
 m:openTab("apps"); assert(m:title()=="Apps & plugins")
 local oi=rowOf("OTHER PLUGINS"); assert(m.rows[oi].kind=="caption")
 local _,dis=rowOf("Disabled thing"); assert(dis.enabled==false)
-painted={}; m:scrollTo(m.rows[rowOf("Disabled thing")].y); m:paintTo(bb)
+painted={}; m:showPage(m:pageAt(m.rows[rowOf("Disabled thing")].y)); m:paintTo(bb)
 local dtext=find("text",function(v) return v.text=="Disabled thing" end)
 assert(dtext.color==SM.colors.disabled and not dtext.bold, "disabled label is grey")
 for _,row in ipairs(m.rows) do assert(not (row.label or ""):find("NEW:"), "NEW: prefix stripped") end
@@ -224,7 +224,7 @@ tapLabel("Mandatory"); assert(calls.keep==m and p.settings_menu==m)
 holdAt(rowOf("Mandatory")); assert(calls.hold[1]==m and calls.hold[2]==mand.item)
 -- sub_item_table_func and backToUpperMenu from a callback
 local li,long=rowOf(m.rows[rowOf("Mandatory")+3].label); assert(long.chevron and long.label:sub(1,6)=="A very")
-m:scrollTo(long.y); painted={}; m:paintTo(bb); assert(long.truncated, "long label is truncated")
+m:showPage(m:pageAt(long.y)); painted={}; m:paintTo(bb); assert(long.truncated, "long label is truncated")
 manager.shown=nil; holdAt(li); assert(manager.shown and manager.shown.text==long.item.text, "hold on a truncated label shows the full text"); manager.shown=m
 tapAt(li); assert(#m.item_table_stack==1 and m.rows[1].label=="Up")
 tapAt(1); assert(#m.item_table_stack==0 and m:title()=="Apps & plugins")
@@ -234,14 +234,14 @@ m:backToUpperMenu(); assert(m.at_root)
 -- switch vs chevron, live enabled_func, truncated value
 m:openTab("apps"); reset(); state.connected=true
 local fi,fam=rowOf("Font family"); assert(fam.switch==true and fam.chevron)
-m:scrollTo(fam.y); local right=m.W-(m.max>0 and 58 or 32)
+m:showPage(m:pageAt(fam.y)); local right=m.W-(m.max>0 and 58 or 32)
 tapAt(fi,right-4.5); assert(not calls.checkmark and m:title()=="Font family", "chevron opens the submenu")
-m:onBack(); m:scrollTo(m.rows[fi].y)
+m:onBack(); m:showPage(m:pageAt(m.rows[fi].y))
 tapAt(fi,right-23-25); assert(calls.checkmark==1 and m:title()=="Apps & plugins", "switch runs checkmark_callback")
-local wi=rowOf("Wireless"); m:scrollTo(m.rows[wi].y)
+local wi=rowOf("Wireless"); m:showPage(m:pageAt(m.rows[wi].y))
 state.connected=false; tapAt(wi,100); assert(not calls.wireless, "enabled_func is evaluated at tap time")
 state.connected=true; m.rows[wi].enabled=false; tapAt(wi,100); assert(calls.wireless==1, "stale disabled cache does not block")
-local di,dev=rowOf("Device"); assert(dev.value); m:scrollTo(dev.y)
+local di,dev=rowOf("Device"); assert(dev.value); m:showPage(m:pageAt(dev.y))
 painted={}; m:paintTo(bb); assert(dev.truncated, "a cut value marks the row truncated")
 manager.shown=nil; holdAt(di); assert(manager.shown and manager.shown.text==dev.item.text_func(), "hold shows the whole row text"); manager.shown=m
 -- an ordinary action closes the menu (no keep_menu_open)
@@ -303,23 +303,30 @@ m:showSearchResults("zzzz"); assert(manager.shown.text=="No menus containing 'zz
 manager.shown=m; m:closeMenu()
 -- Dispatcher's Menu search opens our menu with the search dialog
 menu:onMenuSearch(); assert(p.settings_menu and manager.shown.title=="Search menu entry" and not menu.stock_search); p:closeSettingsMenu()
+-- the magnifier in the title bar opens the same search
+menu:onShowMenu(); m=p.settings_menu; manager.shown=nil
+painted={}; m:paintTo(bb); assert(find("image",function(v) return v.file:find("menu%-search%.svg") end))
+m:onKMenu_tap(nil,{pos={x=(m.W-106)*m.scale,y=54*m.scale}}); assert(manager.shown and manager.shown.title=="Search menu entry")
+manager.shown=m; m:closeMenu()
 print("PASS: menu search over the new tree, results open the item, menu_container[1]:onShowMenuSearch")
 
--- scrolling: snapping, clamping, last row on the bottom edge, fling, throttled fast refresh
+-- paging like Kindle: a stroke turns one page; the last page is full and ends on the last row
 local long_list={}
 for i=1,30 do long_list[i]={text="option "..i,keep_menu_open=true,callback=function() end} end
 long_list[5].separator=true
 local function openLong() menu:onShowMenu(); m=p.settings_menu; m:openTab("help"); m:pushPage({text="Long"},long_list) end
 openLong()
 assert(#m.rows==31 and m.max>0 and m.total==30*56+11)
+local view=m.view_h
+assert(#m.pages==3 and m.pages[1]==0 and m.pages[3]==m.max)
+local cut; for _,row in ipairs(m.rows) do if row.kind~="sep" and row.y+row.h>view then cut=row; break end end
+assert(m.pages[2]==cut.y and cut.y<view, "page 2 starts at the first row page 1 cut off")
+for i=2,#m.pages do assert(m.pages[i]-m.pages[i-1]<=view, "no row is skipped between pages") end
 local last=m.rows[#m.rows]
-m:scrollTo(1e9); assert(m.offset==m.max and math.abs(last.y+last.h-m.offset-m.view_h)<1e-6, "last row on the bottom edge")
-m:scrollTo(-50); assert(m.offset==0)
-m:scrollTo(80); assert(m.offset==56)
-m:scrollTo(56*5+11+10); assert(m.offset==56*5+11, "snaps to a row top after a separator")
-for _,s in ipairs(m.snaps) do assert(s>=0 and s<=m.max) end
+m:showPage(3); assert(m.offset==m.max and math.abs(last.y+last.h-m.offset-m.view_h)<1e-6, "last page ends on the last row")
+m:showPage(99); assert(m.page==3); m:showPage(-5); assert(m.page==1 and m.offset==0)
 painted={}; m:paintTo(bb)
-assert(find("image",function(v) return v.file:find("menu%-down%.svg") end) and find("image",function(v) return v.file:find("menu%-up%.svg") end))
+assert(find("image",function(v) return v.file:find("menu%-down%.svg") end) and find("image",function(v) return v.file:find("menu%-up%-off%.svg") end))
 local dividers=0
 for _,v in ipairs(painted) do
  if v.kind=="rect" and v.color==SM.colors.divider and v.h<=3 and v.y>79*m.scale then
@@ -329,63 +336,72 @@ end
 assert(dividers>0)
 local thumb=find("rect",function(v) return v.color=="black" and v.w==math.max(1,math.floor((m.W-19)*m.scale)-math.floor((m.W-23)*m.scale)) end)
 assert(thumb and thumb.x>=math.floor((m.W-28)*m.scale) and thumb.x+thumb.w<=math.floor((m.W-14)*m.scale)+1, "scrollbar 14-28 units from the edge")
-m:scrollTo(0)
-clock_ms=1000; manager.scheduled=nil
+-- a pan does not move the list; the release turns one page, refreshing only the list
 local x=150*m.scale; local y0=400*m.scale
-m:onKMenu_pan(nil,{start_pos={x=x,y=y0},pos={x=x,y=y0-100*m.scale},relative={x=0,y=-100*m.scale},time=1000*1000})
-assert(math.abs(m.offset-100)<1e-6 and manager.last_dirty.refresh=="fast")
-assert(manager.last_dirty.region.y==math.floor(79*m.scale) and manager.last_dirty.region.h==screen.h-math.floor(79*m.scale))
-manager.last_dirty=nil; clock_ms=1030
-m:onKMenu_pan(nil,{start_pos={x=x,y=y0},pos={x=x,y=y0-130*m.scale},relative={x=0,y=-130*m.scale},time=1030*1000})
-assert(manager.last_dirty==nil and manager.scheduled, "repaint throttled to 80 ms")
-clock_ms=1090; local fire=manager.scheduled; manager.scheduled=nil; fire()
-assert(manager.last_dirty.refresh=="fast")
-m:onKMenu_pan_release(nil,{pos={x=x,y=y0-130*m.scale},time=1300*1000})
-assert(m.offset==112 and manager.last_dirty.refresh=="ui" and not manager.scheduled)
-clock_ms=2000
-m:onKMenu_pan(nil,{start_pos={x=x,y=y0},pos={x=x,y=y0-20*m.scale},relative={x=0,y=-20*m.scale},time=2000*1000})
-m:onKMenu_pan(nil,{start_pos={x=x,y=y0},pos={x=x,y=y0-60*m.scale},relative={x=0,y=-60*m.scale},time=2040*1000})
-m:onKMenu_swipe(nil,{direction="north",pos={x=x,y=y0},end_pos={x=x,y=y0-60*m.scale},time=2050*1000})
-assert(m.offset==m:nearestSnap(492) and m.offset>400, "fling adds momentum")
-local before_flick=m.offset
-m:onKMenu_swipe(nil,{direction="north",pos={x=x,y=y0},end_pos={x=x,y=y0-50*m.scale},distance=50*m.scale,time=2600*1000})
-assert(m.offset>before_flick+50 and m.offset==m:nearestSnap(m.offset))
-m:scrollTo(0)
+manager.last_dirty=nil
+m:onKMenu_pan(nil,{start_pos={x=x,y=y0},pos={x=x,y=y0-100*m.scale},relative={x=0,y=-100*m.scale}})
+assert(m.offset==0 and manager.last_dirty==nil, "the list does not follow the finger")
+m:onKMenu_pan(nil,{start_pos={x=x,y=y0},pos={x=x,y=y0-400*m.scale},relative={x=0,y=-400*m.scale}})
+m:onKMenu_pan_release(nil,{pos={x=x,y=y0-400*m.scale}})
+assert(m.page==2 and m.offset==m.pages[2] and not m.drag, "a long drag still turns a single page")
+assert(manager.last_dirty.refresh=="ui" and manager.last_dirty.region.y==math.floor(79*m.scale))
+-- a fast stroke ends as swipe after pans
+m:onKMenu_pan(nil,{start_pos={x=x,y=y0},pos={x=x,y=y0-60*m.scale}})
+m:onKMenu_swipe(nil,{direction="north",pos={x=x,y=y0},end_pos={x=x,y=y0-60*m.scale}})
+assert(m.page==3 and m.offset==m.max)
+m:onKMenu_swipe(nil,{direction="north",pos={x=x,y=y0},end_pos={x=x,y=y0-60*m.scale}}); assert(m.page==3, "no page after the last")
+m:onKMenu_swipe(nil,{direction="south",pos={x=x,y=y0},end_pos={x=x,y=y0+60*m.scale}}); assert(m.page==2)
+-- a short or sideways stroke does not turn the page; multiswipe settles a stroke
+m:onKMenu_pan(nil,{start_pos={x=x,y=y0},pos={x=x,y=y0+10*m.scale}})
+m:onKMenu_pan_release(nil,{pos={x=x,y=y0+10*m.scale}}); assert(m.page==2)
+m:onKMenu_pan(nil,{start_pos={x=x,y=y0},pos={x=x+200*m.scale,y=y0+50*m.scale}})
+m:onKMenu_multiswipe(nil,{end_pos={x=x+200*m.scale,y=y0+50*m.scale}}); assert(m.page==2 and not m.drag)
+m:onKMenu_pan(nil,{start_pos={x=x,y=y0},pos={x=x,y=y0+80*m.scale}})
+m:onKMenu_multiswipe(nil,{end_pos={x=x,y=y0+80*m.scale}}); assert(m.page==1, "multiswipe settles the stroke")
+-- mouse wheel turns pages too
+m:onPan(nil,{mousewheel_direction=-1,direction="north"}); assert(m.page==2)
+m:onPan(nil,{mousewheel_direction=1,direction="south"}); assert(m.page==1)
 -- swipe east goes back, like the ← button
 m:onKMenu_swipe(nil,{direction="east",pos={x=x,y=y0},end_pos={x=x+300,y=y0}}); assert(m:title()=="Help" and p.settings_menu==m)
 m:pushPage({text="Long"},long_list)
-m:onKMenu_pan(nil,{start_pos={x=x,y=y0},pos={x=x,y=y0-5000*m.scale},relative={x=0,y=-5000*m.scale},time=3000*1000})
-m:onKMenu_pan_release(nil,{pos={x=x,y=y0-5000*m.scale},time=3500*1000})
-assert(m.offset==m.max)
-m:scrollTo(0)
+-- ▲▼ and page keys turn the same pages
 local bar=m:scrollbar()
-m:onKMenu_tap(nil,{pos={x=(m.W-21)*m.scale,y=(bar.bottom-9)*m.scale}})
-assert(m.offset==m:nearestSnap(m.view_h-56) and m.offset>0)
+m:onKMenu_tap(nil,{pos={x=(m.W-21)*m.scale,y=(bar.bottom-9)*m.scale}}); assert(m.page==2 and m.offset==m.pages[2])
 m:onPrevPage(); assert(m.offset==0)
 m:onNextPage(); local page2=m.offset; assert(page2>0 and m.page==2)
+-- updateItems() keeps the position; page=1 + updateItems() returns to the top like TouchMenu
 m:updateItems(); assert(m.offset==page2)
 m.page=1; m:updateItems(); assert(m.offset==0)
+-- an item id opens the page that shows the item whole
+m.item_table[20].menu_item_id="i20"; m:updateItems(nil,"i20")
+local r20; for _,row in ipairs(m.rows) do if row.item==m.item_table[20] then r20=row end end
+assert(r20.y>=m.offset and r20.y+r20.h<=m.offset+m.view_h)
+m:showPage(1)
+-- a stroke that starts in the header does not turn the page
 m:onKMenu_pan(nil,{start_pos={x=x,y=40*m.scale},pos={x=x,y=300*m.scale},relative={x=0,y=260*m.scale}})
-assert(m.offset==0); m:onKMenu_pan_release(nil,{pos={x=x,y=300*m.scale}})
--- multiswipe settles a drag, mouse wheel scrolls three rows
-m:onKMenu_pan(nil,{start_pos={x=x,y=y0},pos={x=x,y=y0-130*m.scale},relative={x=0,y=-130*m.scale},time=5000*1000})
-m:onKMenu_multiswipe(nil,{pos={x=x,y=y0},end_pos={x=x+200,y=y0-130*m.scale},time=5400*1000})
-assert(m.offset==112 and not m.drag and manager.last_dirty.refresh=="ui", "multiswipe settles the drag")
-m:onPan(nil,{mousewheel_direction=-1,direction="north"}); assert(m.offset==291)
-local after=m.offset; m:onPan(nil,{mousewheel_direction=1,direction="south"}); assert(m.offset<after)
+m:onKMenu_pan_release(nil,{pos={x=x,y=300*m.scale}}); assert(m.offset==0)
+-- a group caption moves to the next page with the row it heads
+local grouped={kd_section=true,{kd_caption="First"}}
+for i=1,9 do grouped[#grouped+1]={text="a"..i,keep_menu_open=true,callback=function() end} end
+grouped[#grouped+1]={kd_caption="Second"}
+for i=1,18 do grouped[#grouped+1]={text="b"..i,keep_menu_open=true,callback=function() end} end
+m:pushPage({text="Grouped"},grouped)
+local cap=m.rows[11]; assert(cap.kind=="caption" and cap.y+cap.h<=m.view_h and m.rows[12].y+m.rows[12].h>m.view_h)
+assert(m.pages[2]==cap.y, "page 2 starts with the caption of its first group")
 m:closeMenu()
-print("PASS: continuous scroll, snap to row tops, clamp, last row on bottom edge, fling, 80 ms fast refresh, ▲▼/page keys, multiswipe, wheel")
+print("PASS: one page per stroke, full last page, captions move with their rows, header strokes, ▲▼/page keys, wheel, target item page")
 
 -- mutual exclusion, suspend, dimension change, rebuild, teardown
 menu:onShowMenu(); m=p.settings_menu
-m:onKMenu_tap(nil,{pos={x=m.W/2*m.scale,y=12*m.scale}}); assert(p.drawer and not p.settings_menu, "chevron opens the top drawer")
-p:activate("settings"); assert(p.settings_menu and not p.drawer, "All Settings opens the new menu")
+m:onKMenu_tap(nil,{pos={x=m.W/2*m.scale,y=12*m.scale}}); assert(p.drawer and p.settings_menu==m, "chevron opens the top drawer over the menu")
+p:activate("settings"); assert(p.settings_menu==m and not p.drawer, "All Settings returns to the menu")
 m=p.settings_menu; m:onKMenu_swipe(nil,{direction="south",pos={x=500,y=20},end_pos={x=500,y=400}})
-assert(p.drawer and not p.settings_menu, "swipe down from the status bar opens the top drawer")
+assert(p.drawer and p.settings_menu==m, "swipe down from the status bar opens the top drawer over the menu")
 p:activate("settings")
 p:onSuspend(); assert(not p.settings_menu)
 menu:onShowMenu(); m=p.settings_menu; p:onSetDimensions(); assert(p.settings_menu==m and not m.closed)
-p:onKindleDrawer(); p:onSetDimensions(); assert(not p.drawer and not p.settings_menu)
+p:onKindleDrawer(); p:onSetDimensions(); assert(not p.drawer and p.settings_menu==m)
+p:closeSettingsMenu()
 menu:onShowMenu(1); m=p.settings_menu; tapLabel("View")
 menu:onRebuildMenu(); assert(menu.rebuilds==1)
 local m2=p.settings_menu; assert(m2 and m2~=m and m.closed and m2:title()=="View" and m2.cur_tab=="library", "rebuild restores the section and page")

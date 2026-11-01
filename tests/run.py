@@ -81,7 +81,7 @@ function Text:isTruncated() return self.max_width~=nil and #self.text*self.face*
 function Text:free() end
 package.preload["ui/widget/textwidget"]=function() return Text end
 local Image=Base:extend{}
-function Image:paintTo(bb,x,y) assert(self.alpha == true, "SVG must alpha blend"); assert(self.original_in_nightmode == false, "UI icons must follow whole-screen inversion"); painted[#painted+1]={kind="image",file=self.file,x=x,y=y,w=self.width,h=self.height} end
+function Image:paintTo(bb,x,y) local f=io.open(self.file); assert(f, "missing icon "..self.file); f:close(); assert(self.alpha == true, "SVG must alpha blend"); assert(self.original_in_nightmode == false, "UI icons must follow whole-screen inversion"); painted[#painted+1]={kind="image",file=self.file,x=x,y=y,w=self.width,h=self.height} end
 function Image:free() end
 package.preload["ui/widget/imagewidget"]=function() return Image end
 bb={paintRect=function(_,x,y,w,h,color) painted[#painted+1]={kind="rect",x=x,y=y,w=w,h=h,color=color} end}
@@ -91,11 +91,7 @@ function bb:alphablitFrom(source,x,y,ox,oy,w,h)
 end
 function device:isTouchDevice() return self.touch ~= false end
 package.preload["ffi/utf8proc"]=function() return {uppercase_dumb=function(s) return py_upper(s) end,lowercase=function(s) return py_lower(s) end} end
-clock_ms=0
-package.preload["ui/time"]=function() return {now=function() return clock_ms*1000 end,to_ms=function(t) return t/1000 end} end
 package.preload.datetime=function() return {secondsToHour=function(s,twelve) return os.date(twelve and "%I:%M %p" or "%H:%M",s) end} end
-function manager:scheduleIn(_,fn) self.scheduled=fn end
-function manager:unschedule(fn) if self.scheduled==fn then self.scheduled=nil end end
 function newUI()
  local menu={activation_menu="swipe_tap",original_calls=0}
  function menu:registerToMainMenu() end
@@ -117,7 +113,8 @@ assert(ui.menu:onSwipeShowMenu({direction="south"})==true and plugin.drawer)
 assert(ui.menu.original_calls==0)
 local first=plugin.drawer; plugin:onKindleDrawer(); assert(first==plugin.drawer)
 plugin:activate("settings"); assert(not plugin.drawer and plugin.settings_menu and ui.menu.original_calls==0)
-plugin:onKindleDrawer(); assert(plugin.drawer and not plugin.settings_menu, "panels are mutually exclusive")
+plugin:onKindleDrawer(); assert(plugin.drawer and plugin.settings_menu, "the drawer opens over the settings menu")
+plugin:closeDrawer(); plugin:closeSettingsMenu()
 plugin.settings.kindle_menu=false
 plugin:activate("settings"); assert(not plugin.drawer and not plugin.settings_menu and ui.menu.original_calls==1)
 plugin.settings.kindle_menu=nil
