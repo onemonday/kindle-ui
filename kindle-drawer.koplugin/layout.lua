@@ -1,4 +1,4 @@
--- New arrangement of KOReader's top menu (design/settings-reorg.html).
+-- New arrangement of KOReader's top menu.
 -- Rows reference KOReader items by MenuSorter id and show KOReader's own item
 -- tables; only sections, captions and new grouping containers have our strings.
 -- Children without an id are shown through views (shallow copies), so the
