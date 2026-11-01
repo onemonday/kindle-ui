@@ -157,7 +157,7 @@ G_reader_settings.data={language=locale}; screen.night_mode=false; painted={}; s
 local ui=previewUI(locale, variant=="book"); local p=Plugin:new{ui=ui}; ui.menu.plugin=p
 ui.menu:onShowMenu(); local m=p.settings_menu
 if variant=="library" then m:openTab("library")
-elseif variant=="long" then m:openTab("network"); m:scrollTo(4*56)
+elseif variant=="long" then m:openTab("network"); m:showPage(2)
 elseif variant=="radio" then m:openItem("filemanager_display_mode"); m:onMenuSelect(m.item_table[1])
 elseif variant=="book" then m:openTab("book") end
 painted={}; m:paintTo(bb); p:onCloseWidget()
