@@ -220,16 +220,19 @@ function Plugin:buttons()
     return result
 end
 
--- Close every panel except keep ("drawer", "bottom_drawer", "quick_actions_panel" or "settings_menu").
-function Plugin:closePanels(keep)
-    if keep ~= "drawer" then self:closeDrawer() end
-    if keep ~= "bottom_drawer" then self:closeBottomDrawer() end
-    if keep ~= "quick_actions_panel" then self:closeQuickActionsPanel() end
-    if keep ~= "settings_menu" then self:closeSettingsMenu() end
+-- Close every panel except the named ones ("drawer", "bottom_drawer", "quick_actions_panel", "settings_menu").
+function Plugin:closePanels(...)
+    local keep = {}
+    for _, name in ipairs({ ... }) do keep[name] = true end
+    if not keep.drawer then self:closeDrawer() end
+    if not keep.bottom_drawer then self:closeBottomDrawer() end
+    if not keep.quick_actions_panel then self:closeQuickActionsPanel() end
+    if not keep.settings_menu then self:closeSettingsMenu() end
 end
 
+-- The drawer opens over the settings menu, which stays underneath as on Kindle.
 function Plugin:onKindleDrawer()
-    self:closePanels("drawer")
+    self:closePanels("drawer", "settings_menu")
     if not self.drawer then
         self.drawer = Drawer:new{ owner = self, buttons = self:buttons() }
         UIManager:show(self.drawer, self.drawer.full_refresh and "full" or "ui", Device.screen:getSize())
