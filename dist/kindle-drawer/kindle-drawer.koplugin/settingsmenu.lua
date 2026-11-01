@@ -147,8 +147,8 @@ function M:layout()
     local rows = {}
     if self.at_root then
         for _, tab in ipairs(self.tab_item_table) do
-            rows[#rows + 1] = { kind = "tab", key = tab.kd_key, label = tab.text, icon = tab.kd_icon, sub = tab.kd_hint,
-                h = tab.kd_hint and ROW2 or ROW, enabled = true, chevron = true }
+            rows[#rows + 1] = { kind = "tab", key = tab.kd_key, label = tab.text, icon = tab.kd_icon,
+                h = ROW, enabled = true, chevron = true }
         end
     else
         local items = self.item_table

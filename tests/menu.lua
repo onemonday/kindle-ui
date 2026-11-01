@@ -136,7 +136,7 @@ local options; do local t={}; p:addToMainMenu(t); options=t.kindle_drawer.sub_it
 assert(options[1].hint=="Replaces the KOReader top menu" and options[1].checked_func() and options[1].separator)
 options[1].callback(); assert(p.settings.kindle_menu==false and not options[1].checked_func()); options[1].callback()
 
--- root page: the ten sections with icon and subtitle
+-- root page: the ten sections with icon, no subtitle
 menu:onShowMenu(); local m=p.settings_menu
 assert(m and manager.shown==m and menu.menu_container==m and menu.original_calls==4)
 assert(manager.last_show.refresh=="flashui")
@@ -145,17 +145,17 @@ local labels={"Wi-Fi & network","Screen & light","Power & battery","Gestures & b
 local icons={"network","screen","power","gestures","language","library","reading","apps","device","help"}
 assert(m.at_root and #m.rows==10, #m.rows)
 for i,row in ipairs(m.rows) do
- assert(row.kind=="tab" and row.key==icons[i] and row.label==labels[i] and row.icon=="section-"..icons[i] and row.h==68 and row.sub and row.chevron, row.label)
+ assert(row.kind=="tab" and row.key==icons[i] and row.label==labels[i] and row.icon=="section-"..icons[i] and row.h==56 and not row.sub and row.chevron, row.label)
 end
-assert(m:title()=="Settings" and m.max>0)
+assert(m:title()=="Settings" and m.max==0, "ten sections fit one screen")
 painted={}; m:paintTo(bb)
 local function find(kind,pred) for _,v in ipairs(painted) do if v.kind==kind and pred(v) then return v end end end
 assert(find("text",function(v) return v.text=="Wi-Fi & network" end))
-assert(find("text",function(v) return v.text=="Wi-Fi, proxy, file transfer" and v.color==SM.colors.sub end))
+assert(not find("text",function(v) return v.color==SM.colors.sub end), "root has no subtitles")
 assert(find("image",function(v) return v.file:find("section%-network%.svg") end))
 assert(not find("image",function(v) return v.file:find("menu%-back%.svg") end), "no back arrow on root")
 assert(find("image",function(v) return v.file:find("menu%-wifi%.svg") end))
-print("PASS: hooks, setting off / non-touch / do_not_show keep stock menu, root shows the ten sections with icons and subtitles")
+print("PASS: hooks, setting off / non-touch / do_not_show keep stock menu, root shows the ten sections with icons")
 
 local function rowOf(label)
  for i,row in ipairs(m.rows) do if row.label==label then return i,row end end
@@ -406,7 +406,7 @@ G_reader_settings.data={language="ru"}; screen.w=1448; screen.h=1072
 local ui4=newMenuUI(nil); local p4=Plugin:new{ui=ui4}; ui4.menu.plugin=p4
 ui4.menu:onShowMenu(); m=p4.settings_menu
 assert(math.abs(m.scale-1072/683)<1e-9 and m.W>512 and math.abs(m.H-683)<1e-9 and m.rows[1].label=="Wi-Fi и сеть" and m:title()=="Настройки")
-assert(m.rows[8].label=="Приложения и плагины" and m.rows[8].sub=="Инструменты, сервисы, управление плагинами")
+assert(m.rows[8].label=="Приложения и плагины" and not m.rows[8].sub)
 m:openTab("library"); m=p4.settings_menu
 local found_ru=false; for _,row in ipairs(m.rows) do if row.sub=="Папки сортируются вместе с книгами" then found_ru=true end end
 assert(found_ru and m.rows[1].label=="ОТКРЫТЬ")
