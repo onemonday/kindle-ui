@@ -1,7 +1,42 @@
+# Сборка, превью и снимки с устройства
+/dist/
+/verification/
+/design/*.png
+
+# Python: окружения, кэш и результаты тестов
 __pycache__/
-*.pyc
-.venv/
+*.py[cod]
+/.venv/
+/venv/
+.pytest_cache/
+.coverage
+.coverage.*
+/htmlcov/
+
+# Локальные инструкции и настройки агентов
 /AGENTS.md
 /agents.md
 /docs/
-/verification/
+/.agents/
+/.codex/
+
+# Локальные переменные окружения
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Файлы ОС и редакторов
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+/.idea/
+/.vscode/
+*.swp
+*.swo
+*~
+*.log
+*.tmp
+*.bak
+*.orig

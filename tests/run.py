@@ -181,4 +181,5 @@ for item in preview_paint.values():
         data=base64.b64encode(Path(item['file']).read_bytes()).decode()
         parts.append(f'<image x="{x}" y="{y}" width="{item["w"]}" height="{item["h"]}" href="data:image/svg+xml;base64,{data}"/>')
 parts.append('</svg>')
+Path('dist').mkdir(exist_ok=True)
 Path('dist/preview.svg').write_text(''.join(parts))
